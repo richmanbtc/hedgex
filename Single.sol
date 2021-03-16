@@ -242,7 +242,9 @@ contract HedgexSingle is HedgexERC20{
         }
     }
 
-    function 
+    function detectSlide(){
+        
+    }
 
     //get the pool's current net
     function getPoolNet() public returns (int256){
