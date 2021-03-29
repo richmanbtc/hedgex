@@ -18,6 +18,9 @@ contract HedgexSingle is HedgexERC20{
     //the min pool's amount
     uint256 immutable minPool;
 
+    //the max pool's amount
+    uint256 maxPool;
+
     //
     uint8 immutable leverage;
 
@@ -249,6 +252,7 @@ contract HedgexSingle is HedgexERC20{
         address account,
         address to
     ){
+        int256 price = getLatestPrice();
         Swapper storage swaper = swapers[account];
         require(swaper.longPosition != swaper.shortPosition, "need long and short not equal");
 
@@ -257,10 +261,10 @@ contract HedgexSingle is HedgexERC20{
         uint256 interest = 0;
         if(swaper.longPosition > swaper.shortPosition){
             require(_shortPosition > _longPosition, "have no interest");            
-            interest = swaper.longPosition * dailyInterestRateBase * (_shortPosition - _longPosition) / _shortPosition;
+            interest = price * swaper.longPosition * dailyInterestRateBase * (_shortPosition - _longPosition) / _shortPosition;
         }else{
             require(_longPosition > _shortPosition, "have no interest");
-            interest = swaper.shortPosition * dailyInterestRateBase * (_longPosition - _shortPosition) / _longPosition;
+            interest = price * swaper.shortPosition * dailyInterestRateBase * (_longPosition - _shortPosition) / _longPosition;
         }
         uint256 reward = interest / 10;
         swaper.margin -= interest;
