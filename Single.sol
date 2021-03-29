@@ -1,6 +1,6 @@
 //SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.7.2;
-import "https://github.com/smartcontractkit/chainlink/blob/master/evm-contracts/src/v0.6/interfaces/AggregatorV3Interface.sol";
+import "./interfaces/AggregatorV3Interface.sol";
 import "./interfaces/IERC20.sol"
 import "./libraries/TransferHelper.sol"
 
@@ -20,6 +20,9 @@ contract HedgexSingle is HedgexERC20{
 
     //
     uint8 immutable leverage;
+
+    // it is mean x / 10000
+    constant dailyInterestRateBase = 10;
 
     int8 feeOn;
 
@@ -225,7 +228,7 @@ contract HedgexSingle is HedgexERC20{
         require(net <= keepMargin, "The price is not required");
 
         if(net > 0){ // send the left token0 to the to for regard
-            TransferHelper.safeTransfer(token0, address(this), net);
+            TransferHelper.safeTransfer(token0, to, net);
         }else{
             totalToken += net
         }
@@ -242,8 +245,27 @@ contract HedgexSingle is HedgexERC20{
         }
     }
 
-    function detectSlide(){
-        
+    function detectSlide(
+        address account,
+        address to
+    ){
+        Swapper storage swaper = swapers[account];
+        require(swaper.longPosition != swaper.shortPosition, "need long and short not equal");
+
+        uint256 _shortPosition = shortPosition;
+        uint256 _longPosition = longPosition;
+        uint256 interest = 0;
+        if(swaper.longPosition > swaper.shortPosition){
+            require(_shortPosition > _longPosition, "have no interest");            
+            interest = swaper.longPosition * dailyInterestRateBase * (_shortPosition - _longPosition) / _shortPosition;
+        }else{
+            require(_longPosition > _shortPosition, "have no interest");
+            interest = swaper.shortPosition * dailyInterestRateBase * (_longPosition - _shortPosition) / _longPosition;
+        }
+        uint256 reward = interest / 10;
+        swaper.margin -= interest;
+        totalPool += interest - reward;
+        TransferHelper.safeTransfer(token0, to, reward);
     }
 
     //get the pool's current net
