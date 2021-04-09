@@ -34,6 +34,9 @@ contract HedgexSingle is HedgexERC20{
     // it is mean x / 10000, for example feeRate = 5, is mean 0.0005
     uint feeRate;
 
+    // it is mean x / 10000
+    uint interestRewardRate = 1000;
+
     //the current total amount of token0 for pool
     uint256 totalPool;
 
@@ -266,7 +269,7 @@ contract HedgexSingle is HedgexERC20{
             require(_longPosition > _shortPosition, "have no interest");
             interest = price * swaper.shortPosition * dailyInterestRateBase * (_longPosition - _shortPosition) / _longPosition;
         }
-        uint256 reward = interest / 10;
+        uint256 reward = interest * interestRewardRate / 10000;
         swaper.margin -= interest;
         totalPool += interest - reward;
         TransferHelper.safeTransfer(token0, to, reward);
