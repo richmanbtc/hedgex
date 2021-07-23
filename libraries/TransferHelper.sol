@@ -1,4 +1,4 @@
-pragma solidity >=0.6.0;
+pragma solidity >=0.5.0;
 
 // helper methods for interacting with ERC20 tokens and sending ETH that do not consistently return true/false
 library TransferHelper {
@@ -43,10 +43,5 @@ library TransferHelper {
             success && (data.length == 0 || abi.decode(data, (bool))),
             "TransferHelper: TRANSFER_FROM_FAILED"
         );
-    }
-
-    function safeTransferETH(address to, uint256 value) internal {
-        (bool success, ) = to.call{value: value}(new bytes(0));
-        require(success, "TransferHelper: ETH_TRANSFER_FAILED");
     }
 }
