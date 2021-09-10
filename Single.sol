@@ -7,13 +7,13 @@ import "./HedgexERC20.sol";
 
 /// @title Single pair hedge pool contract
 contract HedgexSingle is HedgexERC20 {
-    //函数修改器，确保交易时效性，秒数时间戳
+    //确保交易时效性，秒数时间戳
     modifier ensure(uint256 deadline) {
         require(deadline >= block.timestamp, "HedgexSingle: EXPIRED");
         _;
     }
 
-    struct Swapper {
+    struct Trader {
         int256 margin; //保证金
         uint256 longAmount; //多仓持仓量
         uint256 longPrice; //多仓持仓金额
@@ -70,7 +70,7 @@ contract HedgexSingle is HedgexERC20 {
     uint256 public poolShortPrice;
 
     //所有的交易者
-    mapping(address => Swapper) public swappers;
+    mapping(address => Trader) public traders;
 
     //获取价格的合约地址
     AggregatorV3Interface private priceFeed;
@@ -165,7 +165,7 @@ contract HedgexSingle is HedgexERC20 {
             address(this),
             amount
         );
-        swappers[msg.sender].margin += int256(amount);
+        traders[msg.sender].margin += int256(amount);
         emit Recharge(msg.sender, amount);
     }
 
@@ -174,15 +174,15 @@ contract HedgexSingle is HedgexERC20 {
         external
         ensure(deadline)
     {
-        Swapper memory swapper = swappers[msg.sender];
+        Trader memory t = traders[msg.sender];
 
         //当前价格
         uint256 price = getLatestPrice();
         //当前已占用保证金
-        uint256 usedMargin = ((swapper.longAmount + swapper.shortAmount) *
-            price) / leverage;
+        uint256 usedMargin = ((t.longAmount + t.shortAmount) * price) /
+            leverage;
         //计算当前净值
-        int256 net = getAccountNet(swapper, price);
+        int256 net = getAccountNet(t, price);
 
         int256 canWithdrawMargin = net - int256(usedMargin);
         require(canWithdrawMargin > 0, "can withdraw is negative");
@@ -200,7 +200,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 priceExp, //预期开仓价格
         uint256 amount //开仓数量
     ) public {
-        Swapper memory swapper = swappers[msg.sender];
+        Trader memory t = traders[msg.sender];
         uint256 price = getLatestPrice();
         if (direction > 0) {
             require(
@@ -213,10 +213,10 @@ contract HedgexSingle is HedgexERC20 {
         uint8 _leverage = leverage;
 
         //账户净值
-        int256 net = getAccountNet(swapper, price);
+        int256 net = getAccountNet(t, price);
         //占用保证金量
-        uint256 usedMargin = ((swapper.longAmount + swapper.shortAmount) *
-            price) / leverage;
+        uint256 usedMargin = ((t.longAmount + t.shortAmount) * price) /
+            leverage;
         int256 canWithdrawMargin = net - int256(usedMargin);
         require(canWithdrawMargin > 0, "can withdraw is negative");
 
@@ -227,20 +227,20 @@ contract HedgexSingle is HedgexERC20 {
         require(int256(needMargin) <= canUseMargin, "margin is not enough");
 
         if (direction > 0) {
-            swappers[msg.sender].longAmount = swapper.longAmount + amount;
-            swappers[msg.sender].longPrice =
-                (swapper.longAmount * swapper.longPrice + money) /
-                (swapper.longAmount + amount);
+            traders[msg.sender].longAmount = t.longAmount + amount;
+            traders[msg.sender].longPrice =
+                (t.longAmount * t.longPrice + money) /
+                (t.longAmount + amount);
 
             uint256 _amount = poolShortAmount;
             uint256 _price = poolShortPrice;
             poolShortAmount = _amount + amount;
             poolShortPrice = (_amount * _price + money) / (_amount + amount);
         } else if (direction < 0) {
-            swappers[msg.sender].shortAmount = swapper.shortAmount + amount;
-            swappers[msg.sender].shortPrice =
-                (swapper.shortAmount * swapper.shortPrice + money) /
-                (swapper.shortAmount + amount);
+            traders[msg.sender].shortAmount = t.shortAmount + amount;
+            traders[msg.sender].shortPrice =
+                (t.shortAmount * t.shortPrice + money) /
+                (t.shortAmount + amount);
 
             uint256 _amount = poolLongAmount;
             uint256 _price = poolLongPrice;
@@ -248,7 +248,7 @@ contract HedgexSingle is HedgexERC20 {
             poolLongPrice = (_amount * _price + money) / (_amount + amount);
         }
 
-        swappers[msg.sender].margin = swapper.margin - int256(fee);
+        traders[msg.sender].margin = t.margin - int256(fee);
 
         if (feeOn) {
             uint256 platFee = (fee * feeDivide) / divConst;
@@ -278,7 +278,7 @@ contract HedgexSingle is HedgexERC20 {
             "amount over net*rate"
         );
 
-        Swapper memory swaper = swappers[msg.sender];
+        Trader memory t = traders[msg.sender];
         uint256 fee = (amount * price * feeRate) / divConst;
         uint256 _poolFee = fee;
         if (feeOn) {
@@ -288,22 +288,17 @@ contract HedgexSingle is HedgexERC20 {
         }
         int256 profit = 0;
         if (direction > 0) {
-            require(amount <= swaper.longAmount, "long position is not enough");
-            profit = int256(amount * price) - int256(amount * swaper.longPrice);
-            swappers[msg.sender].longAmount = swaper.longAmount - amount;
-            swappers[msg.sender].margin = swaper.margin + profit - int256(fee);
+            require(amount <= t.longAmount, "long position is not enough");
+            profit = int256(amount * price) - int256(amount * t.longPrice);
+            traders[msg.sender].longAmount = t.longAmount - amount;
+            traders[msg.sender].margin = t.margin + profit - int256(fee);
 
             poolShortAmount -= amount;
         } else if (direction < 0) {
-            require(
-                amount <= swaper.shortAmount,
-                "short position is not enough"
-            );
-            profit =
-                int256(amount * swaper.shortPrice) -
-                int256(amount * price);
-            swappers[msg.sender].shortAmount = swaper.shortAmount - amount;
-            swappers[msg.sender].margin = swaper.margin + profit - int256(fee);
+            require(amount <= t.shortAmount, "short position is not enough");
+            profit = int256(amount * t.shortPrice) - int256(amount * price);
+            traders[msg.sender].shortAmount = t.shortAmount - amount;
+            traders[msg.sender].margin = t.margin + profit - int256(fee);
 
             poolLongAmount -= amount;
         }
@@ -311,27 +306,26 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     function explosive(address account, address to) public {
-        Swapper memory swapper = swappers[account];
+        Trader memory t = traders[account];
         uint256 price = getLatestPrice();
 
-        uint256 keepMargin = ((swapper.longAmount + swapper.shortAmount) *
-            price) / 30;
-        int256 net = getAccountNet(swapper, price);
+        uint256 keepMargin = ((t.longAmount + t.shortAmount) * price) / 30;
+        int256 net = getAccountNet(t, price);
         require(net <= int256(keepMargin), "The price is not required");
 
         //用户账户所有数值清空
-        swappers[account].margin = 0;
-        swappers[account].longAmount = 0;
-        swappers[account].longPrice = 0;
-        swappers[account].shortAmount = 0;
-        swappers[account].shortPrice = 0;
+        traders[account].margin = 0;
+        traders[account].longAmount = 0;
+        traders[account].longPrice = 0;
+        traders[account].shortAmount = 0;
+        traders[account].shortPrice = 0;
 
         //对冲池多空仓减掉相应数量
-        if (swapper.longAmount > 0) {
-            poolShortAmount -= swapper.longAmount;
+        if (t.longAmount > 0) {
+            poolShortAmount -= t.longAmount;
         }
-        if (swapper.shortAmount > 0) {
-            poolLongAmount -= swapper.shortAmount;
+        if (t.shortAmount > 0) {
+            poolLongAmount -= t.shortAmount;
         }
 
         if (net > 0) {
@@ -343,20 +337,17 @@ contract HedgexSingle is HedgexERC20 {
 
     function detectSlide(address account, address to) public {
         uint256 price = getLatestPrice();
-        Swapper storage swapper = swappers[account];
-        require(
-            swapper.longAmount != swapper.shortAmount,
-            "need long and short not equal"
-        );
+        Trader storage t = traders[account];
+        require(t.longAmount != t.shortAmount, "need long and short not equal");
 
         uint256 _shortPosition = poolShortAmount;
         uint256 _longPosition = poolLongAmount;
         uint256 interest = 0;
-        if (swapper.longAmount > swapper.shortAmount) {
+        if (t.longAmount > t.shortAmount) {
             require(_shortPosition > _longPosition, "have no interest");
             interest =
                 (price *
-                    swapper.longAmount *
+                    t.longAmount *
                     dailyInterestRateBase *
                     (_shortPosition - _longPosition)) /
                 divConst /
@@ -365,14 +356,14 @@ contract HedgexSingle is HedgexERC20 {
             require(_longPosition > _shortPosition, "have no interest");
             interest =
                 (price *
-                    swapper.shortAmount *
+                    t.shortAmount *
                     dailyInterestRateBase *
                     (_longPosition - _shortPosition)) /
                 divConst /
                 _longPosition;
         }
         uint256 reward = (interest * interestRewardRate) / divConst;
-        swapper.margin -= int256(interest);
+        t.margin -= int256(interest);
         totalPool += int256(interest) - int256(reward);
         TransferHelper.safeTransfer(token0, to, reward);
     }
@@ -396,15 +387,15 @@ contract HedgexSingle is HedgexERC20 {
         return net;
     }
 
-    function getAccountNet(Swapper memory s, uint256 price)
+    function getAccountNet(Trader memory t, uint256 price)
         internal
         pure
         returns (int256)
     {
         return
-            s.margin +
-            int256(s.longAmount * price + s.shortAmount * s.shortPrice) -
-            int256(s.longAmount * s.longPrice + s.shortAmount * price);
+            t.margin +
+            int256(t.longAmount * price + t.shortAmount * t.shortPrice) -
+            int256(t.longAmount * t.longPrice + t.shortAmount * price);
     }
 
     function getLatestPrice() public view returns (uint256) {
