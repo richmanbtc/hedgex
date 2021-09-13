@@ -30,14 +30,8 @@ contract HedgexSingle is HedgexERC20 {
     //对冲合约是否已经启动
     bool isStart;
 
-    //the max pool's amount
-    uint256 maxPool;
-
     //杠杆率
     uint8 leverage;
-
-    //每天利息惩罚率，真实计算的时候用此值除以divConst
-    uint8 constant dailyInterestRateBase = 10;
 
     //单笔交易数量限制，对冲池净值比例，3%
     uint16 constant singleTradeLimitRate = 300;
@@ -54,6 +48,9 @@ contract HedgexSingle is HedgexERC20 {
     //运营平台收取的手续费总量
     uint256 sumFee;
 
+    //每天利息惩罚率，真实计算的时候用此值除以divConst
+    uint8 constant dailyInterestRateBase = 10;
+    
     //对于盈利方，惩罚的利息率，此值除以divConst
     uint256 constant interestRewardRate = 1000;
 
@@ -307,11 +304,13 @@ contract HedgexSingle is HedgexERC20 {
 
     function explosive(address account, address to) public {
         Trader memory t = traders[account];
-        uint256 price = getLatestPrice();
 
-        uint256 keepMargin = ((t.longAmount + t.shortAmount) * price) / 30;
-        int256 net = getAccountNet(t, price);
-        require(net <= int256(keepMargin), "The price is not required");
+        uint256 keepMargin = (t.longAmount *
+            t.longPrice +
+            t.shortAmount *
+            t.shortPrice) / 30;
+        int256 net = getAccountNet(t);
+        require(net <= int256(keepMargin), "Cant not be explosived");
 
         //用户账户所有数值清空
         traders[account].margin = 0;
@@ -385,6 +384,14 @@ contract HedgexSingle is HedgexERC20 {
             int256(poolLongAmount * poolLongPrice + poolShortAmount * price);
         require(net > 0, "net need be position");
         return net;
+    }
+
+    function getAccountNet(Trader memory t) internal view returns (int256) {
+        uint256 price = getLatestPrice();
+        return
+            t.margin +
+            int256(t.longAmount * price + t.shortAmount * t.shortPrice) -
+            int256(t.longAmount * t.longPrice + t.shortAmount * price);
     }
 
     function getAccountNet(Trader memory t, uint256 price)
