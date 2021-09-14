@@ -50,12 +50,14 @@ contract HedgexSingle is HedgexERC20 {
 
     //每天利息惩罚率，真实计算的时候用此值除以divConst
     uint8 constant dailyInterestRateBase = 10;
-    
+
     //对于盈利方，惩罚的利息率，此值除以divConst
     uint256 constant interestRewardRate = 1000;
 
     //token0 是保证金的币种
     address token0;
+    //token0 代币精度
+    uint256 token0Decimal;
     //对冲池中token0的总量，可以为负值
     int256 totalPool;
 
@@ -70,18 +72,27 @@ contract HedgexSingle is HedgexERC20 {
     mapping(address => Trader) public traders;
 
     //获取价格的合约地址
-    AggregatorV3Interface private priceFeed;
+    AggregatorV3Interface private feedPrice;
+    //获取到的合约价格精度
+    uint256 private feedPriceDecimal;
 
     event Mint(address indexed sender, uint256 amount);
     event Burn(address indexed sender, uint256 amount);
     event Recharge(address indexed sender, uint256 amount);
     event Withdraw(address indexed sender, uint256 amount);
 
-    constructor(address _token0, address _feedPrice) {
-        //0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c为ETH网络btc/usd价格
-        priceFeed = AggregatorV3Interface(_feedPrice);
+    constructor(
+        address _token0,
+        address _feedPrice,
+        uint256 _feedPriceDecimal
+    ) {
+        //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419 ETH mainnet eth/usd price
+        //0x8A753747A1Fa494EC906cE90E9f37563A8AF630e rinkeby net eth/usd price
+        feedPrice = AggregatorV3Interface(_feedPrice);
         token0 = _token0;
-        minPool = 1000000000000000000000000;
+        token0Decimal = IERC20(token0).decimals();
+        feedPriceDecimal = _feedPriceDecimal;
+        minPool = 10000000000000000000000;
         leverage = 8;
         isStart = false;
         feeOn = false;
@@ -406,8 +417,8 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     function getLatestPrice() public view returns (uint256) {
-        (, int256 price, , , ) = priceFeed.latestRoundData();
+        (, int256 price, , , ) = feedPrice.latestRoundData();
         require(price > 0, "the pair standard price must be positive");
-        return uint256(price);
+        return (uint256(price) * token0Decimal) / feedPriceDecimal;
     }
 }
