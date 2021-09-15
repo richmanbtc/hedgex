@@ -5,19 +5,19 @@ import "./interfaces/IERC20.sol";
 
 contract HedgexERC20 is IERC20 {
     string public constant override name = "HedgexSingle";
-    string public constant override symbol = "HEDGEXS";
-    uint8 public constant override decimals = 18;
+    string public constant override symbol = "HEXS";
+    uint8 public immutable override decimals;
     uint256 public override totalSupply;
     mapping(address => uint256) public override balanceOf;
     mapping(address => mapping(address => uint256)) public override allowance;
+    mapping(address => uint256) public nonces;
 
-    bytes32 public DOMAIN_SEPARATOR;
+    bytes32 public immutable DOMAIN_SEPARATOR;
     // keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
     bytes32 public constant PERMIT_TYPEHASH =
         0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9;
-    mapping(address => uint256) public nonces;
 
-    constructor() {
+    constructor(uint8 _decimals) {
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
                 keccak256(
@@ -29,6 +29,7 @@ contract HedgexERC20 is IERC20 {
                 address(this)
             )
         );
+        decimals = _decimals;
     }
 
     function _mint(address to, uint256 value) internal {

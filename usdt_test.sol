@@ -3,11 +3,10 @@ pragma solidity =0.8.7;
 import "./interfaces/IERC20.sol";
 
 contract TokenERC20 is IERC20 {
-    /*********Token的属性说明************/
     string public override name = "USDT rinkeby";
     string public override symbol = "USDT";
-    uint8 public override decimals = 6; //
-    uint256 public override totalSupply; // 发行量
+    uint8 public override decimals = 6;
+    uint256 public override totalSupply;
 
     // 建立映射 地址对应了 uint' 便是他的余额
     mapping(address => uint256) public override balanceOf;

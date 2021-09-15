@@ -25,39 +25,39 @@ contract HedgexSingle is HedgexERC20 {
     uint16 constant divConst = 10000;
 
     //保证金池最小量，合约的启动最小值，注意精度
-    uint256 minPool;
+    uint256 public immutable minPool;
 
     //对冲合约是否已经启动
     bool isStart;
 
     //杠杆率
-    uint8 leverage;
+    uint8 public immutable leverage;
 
     //单笔交易数量限制，对冲池净值比例，3%
     uint16 constant singleTradeLimitRate = 300;
 
     //是否开启手续费收取
-    bool feeOn;
+    bool public feeOn;
 
     //手续费费率，真实计算的时候用此值除以divConst
-    uint256 constant feeRate = 30;
+    uint256 public constant feeRate = 30;
 
     //运营平台对手续费的分成比例，真实计算的时候用此值除以divConst
-    uint256 feeDivide = 1500;
+    uint256 public constant feeDivide = 1500;
 
     //运营平台收取的手续费总量
-    uint256 sumFee;
+    uint256 public sumFee;
 
     //每天利息惩罚率，真实计算的时候用此值除以divConst
-    uint8 constant dailyInterestRateBase = 10;
+    uint8 public constant dailyInterestRateBase = 10;
 
     //对于盈利方，惩罚的利息率，此值除以divConst
-    uint256 constant interestRewardRate = 1000;
+    uint256 public constant interestRewardRate = 1000;
 
     //token0 是保证金的币种
     address public token0;
     //token0 代币精度
-    uint256 public token0Decimal;
+    uint8 public token0Decimal;
     //对冲池中token0的总量，可以为负值
     int256 public totalPool;
 
@@ -72,20 +72,25 @@ contract HedgexSingle is HedgexERC20 {
     mapping(address => Trader) public traders;
 
     //获取价格的合约地址
-    AggregatorV3Interface private feedPrice;
+    AggregatorV3Interface private immutable feedPrice;
     //获取到的合约价格精度
-    uint256 private feedPriceDecimal;
+    uint256 private immutable feedPriceDecimal;
 
     event Mint(address indexed sender, uint256 amount);
     event Burn(address indexed sender, uint256 amount);
     event Recharge(address indexed sender, uint256 amount);
     event Withdraw(address indexed sender, uint256 amount);
 
+    /*
+        _token0, 保证金代币的合约地址
+        _feedPrice, 交易对价格获取地址
+        _feedPriceDecimal，上一个地址获取到的价格精度
+    */
     constructor(
         address _token0,
         address _feedPrice,
         uint256 _feedPriceDecimal
-    ) {
+    ) HedgexERC20(IERC20(token0).decimals()) {
         //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419 ETH mainnet eth/usd price
         //0x8A753747A1Fa494EC906cE90E9f37563A8AF630e rinkeby net eth/usd price
         feedPrice = AggregatorV3Interface(_feedPrice);
