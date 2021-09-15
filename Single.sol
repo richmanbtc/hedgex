@@ -55,11 +55,11 @@ contract HedgexSingle is HedgexERC20 {
     uint256 constant interestRewardRate = 1000;
 
     //token0 是保证金的币种
-    address token0;
+    address public token0;
     //token0 代币精度
-    uint256 token0Decimal;
+    uint256 public token0Decimal;
     //对冲池中token0的总量，可以为负值
-    int256 totalPool;
+    int256 public totalPool;
 
     //总池的多仓持仓量和空仓持仓量
     uint256 public poolLongAmount;
@@ -92,7 +92,7 @@ contract HedgexSingle is HedgexERC20 {
         token0 = _token0;
         token0Decimal = IERC20(token0).decimals();
         feedPriceDecimal = _feedPriceDecimal;
-        minPool = 10000000000000000000000;
+        minPool = 1000000000000000000000000;
         leverage = 8;
         isStart = false;
         feeOn = false;
@@ -419,6 +419,6 @@ contract HedgexSingle is HedgexERC20 {
     function getLatestPrice() public view returns (uint256) {
         (, int256 price, , , ) = feedPrice.latestRoundData();
         require(price > 0, "the pair standard price must be positive");
-        return (uint256(price) * token0Decimal) / feedPriceDecimal;
+        return (uint256(price) * (10**token0Decimal)) / (10**feedPriceDecimal);
     }
 }
