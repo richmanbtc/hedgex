@@ -28,7 +28,7 @@ contract HedgexSingle is HedgexERC20 {
     uint256 public immutable minPool;
 
     //对冲合约是否已经启动
-    bool isStart;
+    bool public isStart;
 
     //杠杆率
     uint8 public immutable leverage;
@@ -40,31 +40,33 @@ contract HedgexSingle is HedgexERC20 {
     bool public feeOn;
 
     //手续费费率，真实计算的时候用此值除以divConst
-    uint256 public constant feeRate = 30;
+    uint16 constant feeRate = 30;
 
     //运营平台对手续费的分成比例，真实计算的时候用此值除以divConst
-    uint256 public constant feeDivide = 1500;
+    uint16 constant feeDivide = 1500;
 
     //运营平台收取的手续费总量
     uint256 public sumFee;
 
     //每天利息惩罚率，真实计算的时候用此值除以divConst
-    uint8 public constant dailyInterestRateBase = 10;
+    uint8 constant dailyInterestRateBase = 10;
 
     //对于盈利方，惩罚的利息率，此值除以divConst
-    uint256 public constant interestRewardRate = 1000;
+    uint16 constant interestRewardRate = 1000;
 
     //token0 是保证金的币种
-    address public token0;
-    //token0 代币精度
-    uint8 public token0Decimal;
+    address public immutable token0;
+    //token0 代币精度，已变换10的次方
+    uint256 public immutable token0Decimal;
     //对冲池中token0的总量，可以为负值
     int256 public totalPool;
 
-    //总池的多仓持仓量和空仓持仓量
+    //开仓量精度或者最小开仓量，此代表10的x次方，比如每张合约对应0.001个btc，则此值为-3
+    int8 public immutable amountDecimal;
+    //总池的多仓持仓量和空仓持仓量，单位为“张”
     uint256 public poolLongAmount;
     uint256 public poolShortAmount;
-    //总池的多仓持金额和空仓持金额
+    //总池的多仓价格和空仓价格，单位为“wtoken0/张”，也就是每张合约的价值为token0个代币乘以token0的精度
     uint256 public poolLongPrice;
     uint256 public poolShortPrice;
 
@@ -72,9 +74,9 @@ contract HedgexSingle is HedgexERC20 {
     mapping(address => Trader) public traders;
 
     //获取价格的合约地址
-    AggregatorV3Interface private immutable feedPrice;
+    AggregatorV3Interface public immutable feedPrice;
     //获取到的合约价格精度
-    uint256 private immutable feedPriceDecimal;
+    uint256 public immutable feedPriceDecimal;
 
     event Mint(address indexed sender, uint256 amount);
     event Burn(address indexed sender, uint256 amount);
@@ -84,23 +86,30 @@ contract HedgexSingle is HedgexERC20 {
     /*
         _token0, 保证金代币的合约地址
         _feedPrice, 交易对价格获取地址
-        _feedPriceDecimal，上一个地址获取到的价格精度
+        _feedPriceDecimal，上一个地址获取到的价格精度，对于usd来说为100000000
+        _minStartPool，最小启动金额，注意精度，1000000*(10^6)是100万usdt
+        _leverage，合约执行中的杠杆倍数
+        _amountDecimal，开仓量精度或者最小开仓量，此代表10的x次方        
+        //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419 ETH mainnet eth/usd price
+        //0x8A753747A1Fa494EC906cE90E9f37563A8AF630e rinkeby net eth/usd price
     */
     constructor(
         address _token0,
         address _feedPrice,
-        uint256 _feedPriceDecimal
-    ) HedgexERC20(IERC20(token0).decimals()) {
-        //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419 ETH mainnet eth/usd price
-        //0x8A753747A1Fa494EC906cE90E9f37563A8AF630e rinkeby net eth/usd price
+        uint256 _feedPriceDecimal,
+        uint256 _minStartPool,
+        uint8 _leverage,
+        int8 _amountDecimal
+    ) HedgexERC20(IERC20(_token0).decimals()) {
         feedPrice = AggregatorV3Interface(_feedPrice);
         token0 = _token0;
-        token0Decimal = IERC20(token0).decimals();
+        token0Decimal = 10**(IERC20(_token0).decimals());
         feedPriceDecimal = _feedPriceDecimal;
-        minPool = 1000000000000000000000000;
-        leverage = 8;
+        minPool = _minStartPool;
+        leverage = _leverage;
         isStart = false;
         feeOn = false;
+        amountDecimal = _amountDecimal;
     }
 
     //向对冲池中增加token0的流动性
@@ -116,7 +125,8 @@ contract HedgexSingle is HedgexERC20 {
             liquidity = (totalSupply * amount) / uint256(net);
         }
 
-        //向合约地址发送token0代币，需要提前调用approve授权
+        //向合约地址发送token0代币，需要提前调用approve授权，要授权给合约地址token0的数量
+        //二版可以考虑使用permit
         TransferHelper.safeTransferFrom(
             token0,
             msg.sender,
@@ -195,129 +205,108 @@ contract HedgexSingle is HedgexERC20 {
         uint256 usedMargin = ((t.longAmount + t.shortAmount) * price) /
             leverage;
         //计算当前净值
-        int256 net = getAccountNet(t, price);
+        int256 net = t.margin +
+            int256(t.longAmount * price + t.shortAmount * t.shortPrice) -
+            int256(t.longAmount * t.longPrice + t.shortAmount * price);
 
         int256 canWithdrawMargin = net - int256(usedMargin);
         require(canWithdrawMargin > 0, "can withdraw is negative");
         uint256 maxAmount = amount;
-        if (amount > uint256(canWithdrawMargin)) {
+        if (int256(amount) > canWithdrawMargin) {
             maxAmount = uint256(canWithdrawMargin);
         }
-
+        traders[msg.sender].margin -= int256(maxAmount);
         TransferHelper.safeTransfer(token0, msg.sender, maxAmount);
         emit Withdraw(msg.sender, maxAmount);
     }
 
-    function open(
-        int8 direction, //开仓方向
-        uint256 priceExp, //预期开仓价格
-        uint256 amount //开仓数量
-    ) public {
-        Trader memory t = traders[msg.sender];
+    //开仓做多
+    //priceExp，期望价格，如果为零，表示按市价成交
+    //开仓量，单位为张（合约）
+    function openLong(uint256 priceExp, uint256 amount) public {
         uint256 price = getLatestPrice();
-        if (direction > 0) {
-            require(
-                price >= priceExp || priceExp == 0,
-                "open long price is higher"
-            );
-        } else if (direction < 0) {
-            require(price <= priceExp, "open short price is lower");
-        }
-        uint8 _leverage = leverage;
-
-        //账户净值
-        int256 net = getAccountNet(t, price);
-        //占用保证金量
-        uint256 usedMargin = ((t.longAmount + t.shortAmount) * price) /
-            leverage;
-        int256 canWithdrawMargin = net - int256(usedMargin);
-        require(canWithdrawMargin > 0, "can withdraw is negative");
-
+        require(
+            price <= priceExp || priceExp == 0,
+            "open long price is too high"
+        );
+        Trader memory t = traders[msg.sender];
         uint256 money = amount * price;
-        uint256 needMargin = money / _leverage;
-        uint256 fee = (money * feeRate) / divConst;
-        int256 canUseMargin = net - int256(usedMargin) - int256(fee);
-        require(int256(needMargin) <= canUseMargin, "margin is not enough");
+        uint256 fee = judegOpen(t, price, money);
 
-        if (direction > 0) {
-            traders[msg.sender].longAmount = t.longAmount + amount;
-            traders[msg.sender].longPrice =
-                (t.longAmount * t.longPrice + money) /
-                (t.longAmount + amount);
-
-            uint256 _amount = poolShortAmount;
-            uint256 _price = poolShortPrice;
-            poolShortAmount = _amount + amount;
-            poolShortPrice = (_amount * _price + money) / (_amount + amount);
-        } else if (direction < 0) {
-            traders[msg.sender].shortAmount = t.shortAmount + amount;
-            traders[msg.sender].shortPrice =
-                (t.shortAmount * t.shortPrice + money) /
-                (t.shortAmount + amount);
-
-            uint256 _amount = poolLongAmount;
-            uint256 _price = poolLongPrice;
-            poolLongAmount = _amount + amount;
-            poolLongPrice = (_amount * _price + money) / (_amount + amount);
-        }
-
+        traders[msg.sender].longAmount = t.longAmount + amount;
+        traders[msg.sender].longPrice =
+            (t.longAmount * t.longPrice + money) /
+            (t.longAmount + amount);
         traders[msg.sender].margin = t.margin - int256(fee);
 
-        if (feeOn) {
-            uint256 platFee = (fee * feeDivide) / divConst;
-            sumFee += platFee;
-            totalPool += int256(fee) - int256(platFee);
-        } else {
-            totalPool += int256(fee);
-        }
+        uint256 _amount = poolShortAmount;
+        poolShortAmount = _amount + amount;
+        poolShortPrice =
+            (_amount * poolShortPrice + money) /
+            (_amount + amount);
+
+        feeCharge(fee);
     }
 
-    function close(
-        int8 direction,
-        uint256 priceExp, //wait
-        uint256 amount
-    ) public {
+    //开仓做空
+    //priceExp，期望价格，如果为零，表示按市价成交
+    //开仓量，单位为张（合约）
+    function openShort(uint256 priceExp, uint256 amount) public {
         uint256 price = getLatestPrice();
-        if (direction < 0 && priceExp > 0) {
-            require(price >= priceExp, "close short price is higher");
-        } else if (direction > 0 && priceExp > 0) {
-            require(price <= priceExp, "close long price is lower");
-        }
-        int256 net = getPoolNet(price);
-
-        require(
-            amount <=
-                ((uint256(net) * singleTradeLimitRate) / divConst) / price,
-            "amount over net*rate"
-        );
-
+        require(price >= priceExp, "open short price is too low");
         Trader memory t = traders[msg.sender];
-        uint256 fee = (amount * price * feeRate) / divConst;
-        uint256 _poolFee = fee;
-        if (feeOn) {
-            uint256 platFee = (fee * feeDivide) / divConst;
-            sumFee += platFee;
-            _poolFee -= platFee;
-        }
-        int256 profit = 0;
-        if (direction > 0) {
-            require(amount <= t.longAmount, "long position is not enough");
-            profit = int256(amount * price) - int256(amount * t.longPrice);
-            traders[msg.sender].longAmount = t.longAmount - amount;
-            traders[msg.sender].margin = t.margin + profit - int256(fee);
+        uint256 money = amount * price;
+        uint256 fee = judegOpen(t, price, money);
 
-            poolShortAmount -= amount;
-        } else if (direction < 0) {
-            require(amount <= t.shortAmount, "short position is not enough");
-            profit = int256(amount * t.shortPrice) - int256(amount * price);
-            traders[msg.sender].shortAmount = t.shortAmount - amount;
-            traders[msg.sender].margin = t.margin + profit - int256(fee);
+        traders[msg.sender].shortAmount = t.shortAmount + amount;
+        traders[msg.sender].shortPrice =
+            (t.shortAmount * t.shortPrice + money) /
+            (t.shortAmount + amount);
+        traders[msg.sender].margin = t.margin - int256(fee);
 
-            poolLongAmount -= amount;
-        }
-        totalPool -= -profit + int256(_poolFee);
+        uint256 _amount = poolLongAmount;
+        poolLongAmount = _amount + amount;
+        poolLongPrice = (_amount * poolLongPrice + money) / (_amount + amount);
+
+        feeCharge(fee);
     }
 
+    //平多仓
+    //amount单位为“张”
+    function closeLong(uint256 priceExp, uint256 amount) public {
+        uint256 price = getLatestPrice();
+        require(price >= priceExp, "close long price is lower");
+        Trader memory t = traders[msg.sender];
+        uint256 fee = judgeClose(price, amount, t.longAmount);
+
+        int256 profit = int256(amount) * (int256(price) - int256(t.longPrice));
+        traders[msg.sender].longAmount = t.longAmount - amount;
+        traders[msg.sender].margin = t.margin + profit - int256(fee);
+        poolShortAmount -= amount;
+
+        feeProfitCharge(fee, -profit);
+    }
+
+    //平空仓
+    //amount单位为“张”
+    function closeShort(uint256 priceExp, uint256 amount) public {
+        uint256 price = getLatestPrice();
+        require(
+            price <= priceExp || priceExp == 0,
+            "close short price is higher"
+        );
+        Trader memory t = traders[msg.sender];
+        uint256 fee = judgeClose(price, amount, t.shortAmount);
+
+        int256 profit = int256(amount) * (int256(t.shortPrice) - int256(price));
+        traders[msg.sender].shortAmount = t.shortAmount - amount;
+        traders[msg.sender].margin = t.margin + profit - int256(fee);
+        poolLongAmount -= amount;
+
+        feeProfitCharge(fee, -profit);
+    }
+
+    //爆仓接口
     function explosive(address account, address to) public {
         Trader memory t = traders[account];
 
@@ -350,6 +339,7 @@ contract HedgexSingle is HedgexERC20 {
         }
     }
 
+    //利息收取接口
     function detectSlide(address account, address to) public {
         uint256 price = getLatestPrice();
         Trader storage t = traders[account];
@@ -383,7 +373,7 @@ contract HedgexSingle is HedgexERC20 {
         TransferHelper.safeTransfer(token0, to, reward);
     }
 
-    //get the pool's current net
+    //获取当前对冲池的净值，数值为token0的带精度数量
     function getPoolNet() public view returns (int256) {
         uint256 price = getLatestPrice();
         int256 net = totalPool +
@@ -400,6 +390,65 @@ contract HedgexSingle is HedgexERC20 {
             int256(poolLongAmount * poolLongPrice + poolShortAmount * price);
         require(net > 0, "net need be position");
         return net;
+    }
+
+    //判定用户开仓条件
+    function judegOpen(
+        Trader memory t,
+        uint256 price,
+        uint256 money
+    ) internal view returns (uint256) {
+        //用户净值
+        int256 net = t.margin +
+            int256(t.longAmount * price + t.shortAmount * t.shortPrice) -
+            int256(t.longAmount * t.longPrice + t.shortAmount * price);
+        //已占用保证金量
+        uint256 usedMargin = ((t.longAmount + t.shortAmount) * price) /
+            leverage;
+        //所需保证金
+        uint256 needMargin = money / leverage;
+        //所需手续费
+        uint256 fee = (money * feeRate) / divConst;
+        //可用保证金
+        int256 canUseMargin = net - int256(usedMargin) - int256(fee);
+        require(canUseMargin > 0, "left margin is equal or less than 0");
+        require(uint256(canUseMargin) >= needMargin, "margin is not enough");
+        return fee;
+    }
+
+    function judgeClose(
+        uint256 price,
+        uint256 amount,
+        uint256 openAmount
+    ) internal view returns (uint256) {
+        int256 net = getPoolNet(price);
+        require(
+            amount <=
+                ((uint256(net) * singleTradeLimitRate) / divConst) / price,
+            "amount over net*rate"
+        );
+        require(amount <= openAmount, "position not enough");
+        return (amount * price * feeRate) / divConst;
+    }
+
+    function feeCharge(uint256 fee) internal {
+        if (feeOn) {
+            uint256 platFee = (fee * feeDivide) / divConst;
+            sumFee += platFee;
+            totalPool += int256(fee) - int256(platFee);
+        } else {
+            totalPool += int256(fee);
+        }
+    }
+
+    function feeProfitCharge(uint256 fee, int256 profit) internal {
+        if (feeOn) {
+            uint256 platFee = (fee * feeDivide) / divConst;
+            sumFee += platFee;
+            totalPool += int256(fee) - int256(platFee) + profit;
+        } else {
+            totalPool += int256(fee) + profit;
+        }
     }
 
     function getAccountNet(Trader memory t) internal view returns (int256) {
@@ -421,9 +470,21 @@ contract HedgexSingle is HedgexERC20 {
             int256(t.longAmount * t.longPrice + t.shortAmount * price);
     }
 
+    //获取交易对价格
+    //此价格为真实价格乘以交易对定价币的精度，比如wusdt为10的6次方usdt
+    //再进行每张合约价格的核算，乘以10^amountDecimal
+    //最后数值为，每张合约的定价币带精度价格
     function getLatestPrice() public view returns (uint256) {
         (, int256 price, , , ) = feedPrice.latestRoundData();
         require(price > 0, "the pair standard price must be positive");
-        return (uint256(price) * (10**token0Decimal)) / (10**feedPriceDecimal);
+        if (amountDecimal >= 0) {
+            return
+                (uint256(price) * token0Decimal * 10**uint8(amountDecimal)) /
+                feedPriceDecimal;
+        }
+        return
+            (uint256(price) * token0Decimal) /
+            10**uint8(-amountDecimal) /
+            feedPriceDecimal;
     }
 }
