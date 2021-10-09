@@ -78,10 +78,11 @@ contract HedgexSingle is HedgexERC20 {
     //获取到的合约价格精度
     uint256 public immutable feedPriceDecimal;
 
-    event Mint(address indexed sender, uint256 amount);
-    event Burn(address indexed sender, uint256 amount);
-    event Recharge(address indexed sender, uint256 amount);
-    event Withdraw(address indexed sender, uint256 amount);
+    event Mint(address indexed sender, uint256 amount); //增加流动性
+    event Burn(address indexed sender, uint256 amount); //移除流动性
+    event Recharge(address indexed sender, uint256 amount); //充值保证金
+    event Withdraw(address indexed sender, uint256 amount); //提取保证金
+    event Trade(address indexed sender, int8 direction, uint256 amount); //用户下达交易
 
     /*
         _token0, 保证金代币的合约地址
@@ -118,21 +119,20 @@ contract HedgexSingle is HedgexERC20 {
         address to, //用户lp token的接收地址，新产生的lp会发送到此地址
         uint256 deadline //the deadline timestamp
     ) external ensure(deadline) {
-        uint256 liquidity = amount; //合约在未启动状态下1:1兑换代币
-        if (isStart) {
-            //如果合约已经启动，根据当前净值，计算需要发行多少lp代币，净值小于等于0时，不能操作！
-            int256 net = getPoolNet();
-            liquidity = (totalSupply * amount) / uint256(net);
-        }
-
         //向合约地址发送token0代币，需要提前调用approve授权，要授权给合约地址token0的数量
-        //二版可以考虑使用permit
         TransferHelper.safeTransferFrom(
             token0,
             msg.sender,
             address(this),
             amount
         );
+
+        uint256 liquidity = amount; //合约在未启动状态下1:1兑换代币
+        if (isStart) {
+            //如果合约已经启动，根据当前净值，计算需要发行多少lp代币，净值小于等于0时，不能操作！
+            int256 net = getPoolNet();
+            liquidity = (totalSupply * amount) / uint256(net);
+        }
 
         //token0总量增加
         totalPool += int256(amount);
@@ -215,7 +215,7 @@ contract HedgexSingle is HedgexERC20 {
         if (int256(amount) > canWithdrawMargin) {
             maxAmount = uint256(canWithdrawMargin);
         }
-        traders[msg.sender].margin -= int256(maxAmount);
+        traders[msg.sender].margin = t.margin - int256(maxAmount);
         TransferHelper.safeTransfer(token0, msg.sender, maxAmount);
         emit Withdraw(msg.sender, maxAmount);
     }
@@ -246,6 +246,7 @@ contract HedgexSingle is HedgexERC20 {
             (_amount + amount);
 
         feeCharge(fee);
+        emit Trade(msg.sender, 1, amount);
     }
 
     //开仓做空
@@ -269,6 +270,7 @@ contract HedgexSingle is HedgexERC20 {
         poolLongPrice = (_amount * poolLongPrice + money) / (_amount + amount);
 
         feeCharge(fee);
+        emit Trade(msg.sender, -1, amount);
     }
 
     //平多仓
@@ -284,7 +286,8 @@ contract HedgexSingle is HedgexERC20 {
         traders[msg.sender].margin = t.margin + profit - int256(fee);
         poolShortAmount -= amount;
 
-        feeProfitCharge(fee, -profit);
+        feeCharge(fee, profit);
+        emit Trade(msg.sender, -1, amount);
     }
 
     //平空仓
@@ -303,10 +306,11 @@ contract HedgexSingle is HedgexERC20 {
         traders[msg.sender].margin = t.margin + profit - int256(fee);
         poolLongAmount -= amount;
 
-        feeProfitCharge(fee, -profit);
+        feeCharge(fee, profit);
+        emit Trade(msg.sender, 1, amount);
     }
 
-    //爆仓接口
+    //爆仓
     function explosive(address account, address to) public {
         Trader memory t = traders[account];
 
@@ -339,7 +343,7 @@ contract HedgexSingle is HedgexERC20 {
         }
     }
 
-    //利息收取接口
+    //利息收取
     function detectSlide(address account, address to) public {
         uint256 price = getLatestPrice();
         Trader storage t = traders[account];
@@ -416,6 +420,10 @@ contract HedgexSingle is HedgexERC20 {
         return fee;
     }
 
+    //判断用户平仓条件
+    //price，当前价格
+    //amount，平仓量
+    //openAmount，已开仓量
     function judgeClose(
         uint256 price,
         uint256 amount,
@@ -431,6 +439,7 @@ contract HedgexSingle is HedgexERC20 {
         return (amount * price * feeRate) / divConst;
     }
 
+    //对冲池结算手续费
     function feeCharge(uint256 fee) internal {
         if (feeOn) {
             uint256 platFee = (fee * feeDivide) / divConst;
@@ -441,13 +450,14 @@ contract HedgexSingle is HedgexERC20 {
         }
     }
 
-    function feeProfitCharge(uint256 fee, int256 profit) internal {
+    //对冲池结算手续费和利润
+    function feeCharge(uint256 fee, int256 profit) internal {
         if (feeOn) {
             uint256 platFee = (fee * feeDivide) / divConst;
             sumFee += platFee;
-            totalPool += int256(fee) - int256(platFee) + profit;
+            totalPool += int256(fee) - int256(platFee) - profit;
         } else {
-            totalPool += int256(fee) + profit;
+            totalPool += int256(fee) - profit;
         }
     }
 
