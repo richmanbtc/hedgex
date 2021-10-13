@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: UNLICENSED
-pragma solidity =0.8.9;
+pragma solidity >=0.8.7;
 import "./interfaces/AggregatorV3Interface.sol";
 import "./interfaces/IERC20.sol";
 import "./libraries/TransferHelper.sol";
@@ -82,7 +82,14 @@ contract HedgexSingle is HedgexERC20 {
     event Burn(address indexed sender, uint256 amount); //移除流动性
     event Recharge(address indexed sender, uint256 amount); //充值保证金
     event Withdraw(address indexed sender, uint256 amount); //提取保证金
-    event Trade(address indexed sender, int8 direction, uint256 amount); //用户下达交易
+    event Trade(
+        address indexed sender,
+        int8 direction,
+        uint256 amount,
+        uint256 price
+    ); //用户下达交易
+    event Explosive(address indexed user, uint256 amount, uint256 price); //爆仓事件
+    event TakeInterest(address indexed user, uint256 amount, uint256 price); //收取利息，price为持仓价，amount为收取的利息量
 
     /*
         _token0, 保证金代币的合约地址
@@ -224,6 +231,7 @@ contract HedgexSingle is HedgexERC20 {
     //priceExp，期望价格，如果为零，表示按市价成交
     //开仓量，单位为张（合约）
     function openLong(uint256 priceExp, uint256 amount) public {
+        require(isStart, "contract is not start");
         uint256 price = getLatestPrice();
         require(
             price <= priceExp || priceExp == 0,
@@ -246,13 +254,14 @@ contract HedgexSingle is HedgexERC20 {
             (_amount + amount);
 
         feeCharge(fee);
-        emit Trade(msg.sender, 1, amount);
+        emit Trade(msg.sender, 1, amount, price);
     }
 
     //开仓做空
     //priceExp，期望价格，如果为零，表示按市价成交
     //开仓量，单位为张（合约）
     function openShort(uint256 priceExp, uint256 amount) public {
+        require(isStart, "contract is not start");
         uint256 price = getLatestPrice();
         require(price >= priceExp, "open short price is too low");
         Trader memory t = traders[msg.sender];
@@ -270,7 +279,7 @@ contract HedgexSingle is HedgexERC20 {
         poolLongPrice = (_amount * poolLongPrice + money) / (_amount + amount);
 
         feeCharge(fee);
-        emit Trade(msg.sender, -1, amount);
+        emit Trade(msg.sender, -1, amount, price);
     }
 
     //平多仓
@@ -287,7 +296,7 @@ contract HedgexSingle is HedgexERC20 {
         poolShortAmount -= amount;
 
         feeCharge(fee, profit);
-        emit Trade(msg.sender, -1, amount);
+        emit Trade(msg.sender, -1, amount, price);
     }
 
     //平空仓
@@ -307,7 +316,7 @@ contract HedgexSingle is HedgexERC20 {
         poolLongAmount -= amount;
 
         feeCharge(fee, profit);
-        emit Trade(msg.sender, 1, amount);
+        emit Trade(msg.sender, 1, amount, price);
     }
 
     //爆仓
@@ -318,7 +327,8 @@ contract HedgexSingle is HedgexERC20 {
             t.longPrice +
             t.shortAmount *
             t.shortPrice) / 30;
-        int256 net = getAccountNet(t);
+        uint256 price = getLatestPrice();
+        int256 net = getAccountNet(t, price);
         require(net <= int256(keepMargin), "Cant not be explosived");
 
         //用户账户所有数值清空
@@ -341,6 +351,7 @@ contract HedgexSingle is HedgexERC20 {
         } else {
             totalPool += net;
         }
+        emit Explosive(account, t.longAmount + t.shortAmount, price);
     }
 
     //利息收取
@@ -375,6 +386,8 @@ contract HedgexSingle is HedgexERC20 {
         t.margin -= int256(interest);
         totalPool += int256(interest) - int256(reward);
         TransferHelper.safeTransfer(token0, to, reward);
+
+        emit TakeInterest(account, interest, price);
     }
 
     //获取当前对冲池的净值，数值为token0的带精度数量

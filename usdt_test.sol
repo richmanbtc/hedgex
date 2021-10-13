@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: UNLICENSED
-pragma solidity =0.8.9;
+pragma solidity =0.8.7;
 import "./interfaces/IERC20.sol";
 
 contract TokenERC20 is IERC20 {
