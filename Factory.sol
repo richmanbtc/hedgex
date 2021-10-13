@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: UNLICENSED
-pragma solidity =0.8.7;
+pragma solidity >=0.8.7;
 
 import "./Single.sol";
 
@@ -9,6 +9,7 @@ contract HedgexFactory {
     address internal newFeeToSetter;
 
     mapping(address => mapping(address => address)) public getPair;
+    mapping(address => mapping(address => string)) public getPairName;
     address[] public allPairs;
 
     event PairCreated(
@@ -26,10 +27,15 @@ contract HedgexFactory {
         return allPairs.length;
     }
 
-    function createPair(address token0, address priceFeed)
-        external
-        returns (address pair)
-    {
+    function createPair(
+        address token0,
+        address priceFeed,
+        uint256 feedPriceDecimal,
+        uint256 minStartPool,
+        uint8 leverage,
+        int8 amountDecimal,
+        string memory name
+    ) external returns (address pair) {
         require(token0 != address(0), "hedgex: ZERO_ADDRESS");
         (, int256 price, , , ) = AggregatorV3Interface(priceFeed)
             .latestRoundData();
@@ -39,11 +45,21 @@ contract HedgexFactory {
             "hedgex: PAIR_EXISTS"
         );
         bytes memory bytecode = type(HedgexSingle).creationCode;
-        bytes32 salt = keccak256(abi.encodePacked(token0, priceFeed));
+        bytes32 salt = keccak256(
+            abi.encodePacked(
+                token0,
+                priceFeed,
+                feedPriceDecimal,
+                minStartPool,
+                leverage,
+                amountDecimal
+            )
+        );
         assembly {
             pair := create2(0, add(bytecode, 32), mload(bytecode), salt)
         }
         getPair[token0][priceFeed] = pair;
+        getPairName[token0][priceFeed] = name;
         allPairs.push(pair);
         emit PairCreated(token0, priceFeed, pair, allPairs.length);
     }
