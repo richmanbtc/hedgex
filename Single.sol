@@ -22,7 +22,7 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //各种费率计算时的除数常数
-    uint16 constant divConst = 10000;
+    uint16 public constant divConst = 10000;
 
     //保证金池最小量，合约的启动最小值，注意精度
     uint256 public immutable minPool;
@@ -34,25 +34,28 @@ contract HedgexSingle is HedgexERC20 {
     uint8 public immutable leverage;
 
     //单笔交易数量限制，对冲池净值比例，3%
-    uint16 constant singleTradeLimitRate = 300;
+    uint16 public constant singleTradeLimitRate = 300;
 
     //是否开启手续费收取
     bool public feeOn;
 
     //手续费费率，真实计算的时候用此值除以divConst
-    uint16 constant feeRate = 30;
+    uint16 public constant feeRate = 30;
+
+    //成交价格的偏移设定值，买入时增加，卖出时减少
+    uint8 public constant slideP = 2;
 
     //运营平台对手续费的分成比例，真实计算的时候用此值除以divConst
-    uint16 constant feeDivide = 1500;
+    uint16 public constant feeDivide = 1500;
 
     //运营平台收取的手续费总量
     uint256 public sumFee;
 
     //每天利息惩罚率，真实计算的时候用此值除以divConst
-    uint8 constant dailyInterestRateBase = 10;
+    uint8 public constant dailyInterestRateBase = 10;
 
-    //对于盈利方，惩罚的利息率，此值除以divConst
-    uint16 constant interestRewardRate = 1000;
+    //利息分成比例，真实计算的时候用此值除以divConst
+    uint16 public constant interestRewardRate = 1000;
 
     //token0 是保证金的币种
     address public immutable token0;
@@ -120,12 +123,19 @@ contract HedgexSingle is HedgexERC20 {
         amountDecimal = _amountDecimal;
     }
 
+    function initialize(
+        address _token0,
+        address _feedPrice,
+        uint256 _feedPriceDecimal,
+        uint256 _minStartPool,
+        uint8 _leverage,
+        int8 _amountDecimal
+    ) external {}
+
     //向对冲池中增加token0的流动性
-    function addLiquidity(
-        uint256 amount, //token0的总量
-        address to, //用户lp token的接收地址，新产生的lp会发送到此地址
-        uint256 deadline //the deadline timestamp
-    ) external ensure(deadline) {
+    //amount, token0的总量
+    //to 用户lp token的接收地址，新产生的lp会发送到此地址
+    function addLiquidity(uint256 amount, address to) external {
         //向合约地址发送token0代币，需要提前调用approve授权，要授权给合约地址token0的数量
         TransferHelper.safeTransferFrom(
             token0,
@@ -152,11 +162,9 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //从总池中移走流动性代币token0
-    function removeLiquidity(
-        uint256 liquidity, //发送到合约地址的lp代币数量
-        address to, //token0代币的接收地址
-        uint256 deadline
-    ) external ensure(deadline) {
+    //liquidity, 发送到合约地址的lp代币数量
+    //to, token0代币的接收地址
+    function removeLiquidity(uint256 liquidity, address to) external {
         uint256 amount = liquidity;
         if (isStart) {
             uint256 price = getLatestPrice();
@@ -184,10 +192,8 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //增加用户保证金
-    function rechargeMargin(
-        uint256 amount, //发送到池中的token0代币数量
-        uint256 deadline //交易截止时间
-    ) external ensure(deadline) {
+    //amount, 发送到池中的token0代币数量
+    function rechargeMargin(uint256 amount) public {
         //向合约地址发送token0代币，需要提前调用approve授权
         TransferHelper.safeTransferFrom(
             token0,
@@ -228,10 +234,18 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //开仓做多
-    //priceExp，期望价格，如果为零，表示按市价成交
-    //开仓量，单位为张（合约）
-    function openLong(uint256 priceExp, uint256 amount) public {
+    //priceExp，期望价格，如果为0，表示按市价成交
+    //amount，开仓量，单位为张
+    //rechargeAmount, 转入的保证金量
+    function openLong(
+        uint256 priceExp,
+        uint256 amount,
+        uint256 rechargeAmount
+    ) public {
         require(isStart, "contract is not start");
+        if (rechargeAmount > 0) {
+            rechargeMargin(rechargeAmount);
+        }
         uint256 price = getLatestPrice();
         require(
             price <= priceExp || priceExp == 0,
@@ -258,10 +272,18 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //开仓做空
-    //priceExp，期望价格，如果为零，表示按市价成交
-    //开仓量，单位为张（合约）
-    function openShort(uint256 priceExp, uint256 amount) public {
+    //priceExp，期望价格，如果为0，表示按市价成交
+    //amount，开仓量，单位为张
+    //rechargeAmount, 转入的保证金量
+    function openShort(
+        uint256 priceExp,
+        uint256 amount,
+        uint256 rechargeAmount
+    ) public {
         require(isStart, "contract is not start");
+        if (rechargeAmount > 0) {
+            rechargeMargin(rechargeAmount);
+        }
         uint256 price = getLatestPrice();
         require(price >= priceExp, "open short price is too low");
         Trader memory t = traders[msg.sender];
