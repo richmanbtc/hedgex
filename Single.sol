@@ -8,10 +8,12 @@ import "./HedgexERC20.sol";
 /// @title Single pair hedge pool contract
 contract HedgexSingle is HedgexERC20 {
     //确保交易时效性，秒数时间戳
+    /*
     modifier ensure(uint256 deadline) {
         require(deadline >= block.timestamp, "HedgexSingle: EXPIRED");
         _;
     }
+    */
 
     struct Trader {
         int256 margin; //保证金
@@ -36,14 +38,14 @@ contract HedgexSingle is HedgexERC20 {
     //单笔交易数量限制，对冲池净值比例，3%
     uint16 public constant singleTradeLimitRate = 30000;
 
+    //成交价格的偏移设定值，买入时增加，卖出时减少，此数为万分比
+    uint8 public constant slideP = 50;
+
     //是否开启手续费收取
     bool public feeOn;
 
     //手续费费率，真实计算的时候用此值除以divConst
     uint16 public constant feeRate = 600;
-
-    //成交价格的偏移设定值，买入时增加，卖出时减少，此数为万分比
-    uint8 public constant slideP = 50;
 
     //运营平台对手续费的分成比例，真实计算的时候用此值除以divConst
     uint24 public constant feeDivide = 250000;
@@ -206,10 +208,7 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //用户提取保证金
-    function withdrawMargin(uint256 amount, uint256 deadline)
-        external
-        ensure(deadline)
-    {
+    function withdrawMargin(uint256 amount) external {
         Trader memory t = traders[msg.sender];
 
         //当前价格
@@ -282,12 +281,14 @@ contract HedgexSingle is HedgexERC20 {
         uint256 amount,
         uint256 rechargeAmount
     ) public {
+        uint256 price = (getLatestPrice() * (divConst - slideP)) / divConst;
+        require(price >= priceExp, "open short price is too low");
+
         require(isStart, "contract is not start");
         if (rechargeAmount > 0) {
             rechargeMargin(rechargeAmount);
         }
-        uint256 price = (getLatestPrice() * (divConst - slideP)) / divConst;
-        require(price >= priceExp, "open short price is too low");
+
         Trader memory t = traders[msg.sender];
         uint256 money = amount * price;
         uint256 fee = judegOpen(t, price, money);
@@ -344,7 +345,7 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //爆仓
-    function explosive(address account, address to) public {
+    function explosive(address account) public {
         Trader memory t = traders[account];
 
         uint256 keepMargin = (t.longAmount *
@@ -371,7 +372,7 @@ contract HedgexSingle is HedgexERC20 {
         }
 
         if (net > 0) {
-            TransferHelper.safeTransfer(token0, to, uint256(net));
+            TransferHelper.safeTransfer(token0, msg.sender, uint256(net));
         } else {
             totalPool += net;
         }
@@ -379,7 +380,7 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //利息收取
-    function detectSlide(address account, address to) public {
+    function detectSlide(address account) public {
         uint256 price = getLatestPrice();
         Trader storage t = traders[account];
         require(t.longAmount != t.shortAmount, "need long and short not equal");
@@ -409,7 +410,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 reward = (interest * interestRewardRate) / divConst;
         t.margin -= int256(interest);
         totalPool += int256(interest) - int256(reward);
-        TransferHelper.safeTransfer(token0, to, reward);
+        TransferHelper.safeTransfer(token0, msg.sender, reward);
 
         emit TakeInterest(account, interest, price);
     }
