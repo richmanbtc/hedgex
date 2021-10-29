@@ -89,12 +89,22 @@ contract HedgexSingle is HedgexERC20 {
     event Withdraw(address indexed sender, uint256 amount); //提取保证金
     event Trade(
         address indexed sender,
-        int8 direction,
+        int8 direction, //开多、开空、平多、平空，分别为1，-1，-2，2
         uint256 amount,
         uint256 price
     ); //用户下达交易
-    event Explosive(address indexed user, uint256 amount, uint256 price); //爆仓事件
-    event TakeInterest(address indexed user, uint256 amount, uint256 price); //收取利息，price为持仓价，amount为收取的利息量
+    event Explosive(
+        address indexed user,
+        int8 direction, //爆仓方向，-2表示多仓爆仓，2表示空仓爆仓
+        uint256 amount,
+        uint256 price
+    ); //爆仓事件
+    event TakeInterest(
+        address indexed user,
+        int8 direction,
+        uint256 amount,
+        uint256 price
+    ); //收取利息，price为持仓价，amount为收取的利息量
 
     /*
         _token0, 保证金代币的合约地址
@@ -318,10 +328,13 @@ contract HedgexSingle is HedgexERC20 {
         int256 profit = int256(amount) * (int256(price) - int256(t.longPrice));
         traders[msg.sender].longAmount = t.longAmount - amount;
         traders[msg.sender].margin = t.margin + profit - int256(fee);
+        if (t.longAmount == amount) {
+            traders[msg.sender].longPrice = 0;
+        }
         poolShortAmount -= amount;
 
         feeCharge(fee, profit);
-        emit Trade(msg.sender, -1, amount, price);
+        emit Trade(msg.sender, -2, amount, price);
     }
 
     //平空仓
@@ -338,10 +351,13 @@ contract HedgexSingle is HedgexERC20 {
         int256 profit = int256(amount) * (int256(t.shortPrice) - int256(price));
         traders[msg.sender].shortAmount = t.shortAmount - amount;
         traders[msg.sender].margin = t.margin + profit - int256(fee);
+        if (t.shortAmount == amount) {
+            traders[msg.sender].shortPrice = 0;
+        }
         poolLongAmount -= amount;
 
         feeCharge(fee, profit);
-        emit Trade(msg.sender, 1, amount, price);
+        emit Trade(msg.sender, 2, amount, price);
     }
 
     //爆仓
@@ -354,14 +370,7 @@ contract HedgexSingle is HedgexERC20 {
             t.shortPrice) / 30;
         uint256 price = getLatestPrice();
         int256 net = getAccountNet(t, price);
-        require(net <= int256(keepMargin), "Cant not be explosived");
-
-        //用户账户所有数值清空
-        traders[account].margin = 0;
-        traders[account].longAmount = 0;
-        traders[account].longPrice = 0;
-        traders[account].shortAmount = 0;
-        traders[account].shortPrice = 0;
+        require(net <= int256(keepMargin), "Can not be explosived");
 
         //对冲池多空仓减掉相应数量
         if (t.longAmount > 0) {
@@ -371,12 +380,24 @@ contract HedgexSingle is HedgexERC20 {
             poolLongAmount -= t.shortAmount;
         }
 
+        int8 direction = -2;
+        if (t.longAmount < t.shortAmount) {
+            direction = 2;
+        }
+
+        //用户账户所有数值清空
+        traders[account].margin = 0;
+        traders[account].longAmount = 0;
+        traders[account].longPrice = 0;
+        traders[account].shortAmount = 0;
+        traders[account].shortPrice = 0;
+
         if (net > 0) {
             TransferHelper.safeTransfer(token0, msg.sender, uint256(net));
         } else {
             totalPool += net;
         }
-        emit Explosive(account, t.longAmount + t.shortAmount, price);
+        emit Explosive(account, direction, t.longAmount + t.shortAmount, price);
     }
 
     //利息收取
@@ -388,6 +409,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 _shortPosition = poolShortAmount;
         uint256 _longPosition = poolLongAmount;
         uint256 interest = 0;
+        int8 direction = 1;
         if (t.longAmount > t.shortAmount) {
             require(_shortPosition > _longPosition, "have no interest");
             interest =
@@ -399,6 +421,7 @@ contract HedgexSingle is HedgexERC20 {
                 _shortPosition;
         } else {
             require(_longPosition > _shortPosition, "have no interest");
+            direction = -1;
             interest =
                 (price *
                     t.shortAmount *
@@ -412,7 +435,7 @@ contract HedgexSingle is HedgexERC20 {
         totalPool += int256(interest) - int256(reward);
         TransferHelper.safeTransfer(token0, msg.sender, reward);
 
-        emit TakeInterest(account, interest, price);
+        emit TakeInterest(account, direction, interest, price);
     }
 
     //获取当前对冲池的净值，数值为token0的带精度数量
