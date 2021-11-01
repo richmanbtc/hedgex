@@ -340,7 +340,7 @@
                 583
             ],
             "IERC20": [
-                2639
+                2693
             ]
         },
         "id": 584,
@@ -365,7 +365,7 @@
                 "nameLocation": "-1:-1:-1",
                 "nodeType": "ImportDirective",
                 "scope": 584,
-                "sourceUnit": 2640,
+                "sourceUnit": 2694,
                 "src": "64:33:1",
                 "symbolAliases": [],
                 "unitAlias": ""
@@ -378,7 +378,7 @@
                             "id": 238,
                             "name": "IERC20",
                             "nodeType": "IdentifierPath",
-                            "referencedDeclaration": 2639,
+                            "referencedDeclaration": 2693,
                             "src": "123:6:1"
                         },
                         "id": 239,
@@ -393,7 +393,7 @@
                 "id": 583,
                 "linearizedBaseContracts": [
                     583,
-                    2639
+                    2693
                 ],
                 "name": "HedgexERC20",
                 "nameLocation": "108:11:1",
@@ -401,7 +401,7 @@
                 "nodes": [
                     {
                         "baseFunctions": [
-                            2578
+                            2632
                         ],
                         "constant": true,
                         "functionSelector": "06fdde03",
@@ -454,7 +454,7 @@
                     },
                     {
                         "baseFunctions": [
-                            2583
+                            2637
                         ],
                         "constant": true,
                         "functionSelector": "95d89b41",
@@ -507,7 +507,7 @@
                     },
                     {
                         "baseFunctions": [
-                            2588
+                            2642
                         ],
                         "constant": false,
                         "functionSelector": "313ce567",
@@ -544,7 +544,7 @@
                     },
                     {
                         "baseFunctions": [
-                            2593
+                            2647
                         ],
                         "constant": false,
                         "functionSelector": "18160ddd",
@@ -581,7 +581,7 @@
                     },
                     {
                         "baseFunctions": [
-                            2600
+                            2654
                         ],
                         "constant": false,
                         "functionSelector": "70a08231",
@@ -637,7 +637,7 @@
                     },
                     {
                         "baseFunctions": [
-                            2609
+                            2663
                         ],
                         "constant": false,
                         "functionSelector": "dd62ed3e",
@@ -1612,7 +1612,7 @@
                                             "name": "Transfer",
                                             "nodeType": "Identifier",
                                             "overloadedDeclarations": [],
-                                            "referencedDeclaration": 2573,
+                                            "referencedDeclaration": 2627,
                                             "src": "1373:8:1",
                                             "typeDescriptions": {
                                                 "typeIdentifier": "t_function_event_nonpayable$_t_address_$_t_address_$_t_uint256_$returns$__$",
@@ -1945,7 +1945,7 @@
                                             "name": "Transfer",
                                             "nodeType": "Identifier",
                                             "overloadedDeclarations": [],
-                                            "referencedDeclaration": 2573,
+                                            "referencedDeclaration": 2627,
                                             "src": "1549:8:1",
                                             "typeDescriptions": {
                                                 "typeIdentifier": "t_function_event_nonpayable$_t_address_$_t_address_$_t_uint256_$returns$__$",
@@ -2212,7 +2212,7 @@
                                             "name": "Approval",
                                             "nodeType": "Identifier",
                                             "overloadedDeclarations": [],
-                                            "referencedDeclaration": 2565,
+                                            "referencedDeclaration": 2619,
                                             "src": "1756:8:1",
                                             "typeDescriptions": {
                                                 "typeIdentifier": "t_function_event_nonpayable$_t_address_$_t_address_$_t_uint256_$returns$__$",
@@ -2550,7 +2550,7 @@
                                             "name": "Transfer",
                                             "nodeType": "Identifier",
                                             "overloadedDeclarations": [],
-                                            "referencedDeclaration": 2573,
+                                            "referencedDeclaration": 2627,
                                             "src": "1979:8:1",
                                             "typeDescriptions": {
                                                 "typeIdentifier": "t_function_event_nonpayable$_t_address_$_t_address_$_t_uint256_$returns$__$",
@@ -2689,7 +2689,7 @@
                     },
                     {
                         "baseFunctions": [
-                            2618
+                            2672
                         ],
                         "body": {
                             "id": 438,
@@ -2937,7 +2937,7 @@
                     },
                     {
                         "baseFunctions": [
-                            2627
+                            2681
                         ],
                         "body": {
                             "id": 458,
@@ -3185,7 +3185,7 @@
                     },
                     {
                         "baseFunctions": [
-                            2638
+                            2692
                         ],
                         "body": {
                             "id": 502,

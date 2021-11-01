@@ -251,9 +251,10 @@ contract HedgexSingle is HedgexERC20 {
         uint256 amount,
         uint256 rechargeAmount
     ) public {
-        uint256 price = (getLatestPrice() * (divConst + slideP)) / divConst;
+        uint256 indexPrice = getLatestPrice();
+        uint256 openPrice = (indexPrice * (divConst + slideP)) / divConst;
         require(
-            price <= priceExp || priceExp == 0,
+            openPrice <= priceExp || priceExp == 0,
             "open long price is too high"
         );
         require(isStart, "contract is not start");
@@ -263,8 +264,8 @@ contract HedgexSingle is HedgexERC20 {
         }
 
         Trader memory t = traders[msg.sender];
-        uint256 money = amount * price;
-        uint256 fee = judegOpen(t, price, money);
+        uint256 money = amount * openPrice;
+        uint256 fee = judegOpen(t, amount, indexPrice, money);
 
         traders[msg.sender].longAmount = t.longAmount + amount;
         traders[msg.sender].longPrice =
@@ -279,7 +280,7 @@ contract HedgexSingle is HedgexERC20 {
             (_amount + amount);
 
         feeCharge(fee);
-        emit Trade(msg.sender, 1, amount, price);
+        emit Trade(msg.sender, 1, amount, openPrice);
     }
 
     //开仓做空
@@ -291,8 +292,9 @@ contract HedgexSingle is HedgexERC20 {
         uint256 amount,
         uint256 rechargeAmount
     ) public {
-        uint256 price = (getLatestPrice() * (divConst - slideP)) / divConst;
-        require(price >= priceExp, "open short price is too low");
+        uint256 indexPrice = getLatestPrice();
+        uint256 openPrice = (indexPrice * (divConst - slideP)) / divConst;
+        require(openPrice >= priceExp, "open short price is too low");
 
         require(isStart, "contract is not start");
         if (rechargeAmount > 0) {
@@ -300,8 +302,8 @@ contract HedgexSingle is HedgexERC20 {
         }
 
         Trader memory t = traders[msg.sender];
-        uint256 money = amount * price;
-        uint256 fee = judegOpen(t, price, money);
+        uint256 money = amount * openPrice;
+        uint256 fee = judegOpen(t, indexPrice, amount, money);
 
         traders[msg.sender].shortAmount = t.shortAmount + amount;
         traders[msg.sender].shortPrice =
@@ -314,18 +316,21 @@ contract HedgexSingle is HedgexERC20 {
         poolLongPrice = (_amount * poolLongPrice + money) / (_amount + amount);
 
         feeCharge(fee);
-        emit Trade(msg.sender, -1, amount, price);
+        emit Trade(msg.sender, -1, amount, openPrice);
     }
 
     //平多仓
     //amount单位为“张”
     function closeLong(uint256 priceExp, uint256 amount) public {
-        uint256 price = (getLatestPrice() * (divConst - slideP)) / divConst;
-        require(price >= priceExp, "close long price is lower");
+        uint256 indexPrice = getLatestPrice();
+        uint256 closePrice = (getLatestPrice() * (divConst - slideP)) /
+            divConst;
+        require(closePrice >= priceExp, "close long price is lower");
         Trader memory t = traders[msg.sender];
-        uint256 fee = judgeClose(price, amount, t.longAmount);
+        uint256 fee = judgeClose(indexPrice, closePrice, amount, t.longAmount);
 
-        int256 profit = int256(amount) * (int256(price) - int256(t.longPrice));
+        int256 profit = int256(amount) *
+            (int256(closePrice) - int256(t.longPrice));
         traders[msg.sender].longAmount = t.longAmount - amount;
         traders[msg.sender].margin = t.margin + profit - int256(fee);
         if (t.longAmount == amount) {
@@ -334,21 +339,23 @@ contract HedgexSingle is HedgexERC20 {
         poolShortAmount -= amount;
 
         feeCharge(fee, profit);
-        emit Trade(msg.sender, -2, amount, price);
+        emit Trade(msg.sender, -2, amount, closePrice);
     }
 
     //平空仓
     //amount单位为“张”
     function closeShort(uint256 priceExp, uint256 amount) public {
-        uint256 price = (getLatestPrice() * (divConst + slideP)) / divConst;
+        uint256 indexPrice = getLatestPrice();
+        uint256 closePirce = (indexPrice * (divConst + slideP)) / divConst;
         require(
-            price <= priceExp || priceExp == 0,
+            closePirce <= priceExp || priceExp == 0,
             "close short price is higher"
         );
         Trader memory t = traders[msg.sender];
-        uint256 fee = judgeClose(price, amount, t.shortAmount);
+        uint256 fee = judgeClose(indexPrice, closePirce, amount, t.shortAmount);
 
-        int256 profit = int256(amount) * (int256(t.shortPrice) - int256(price));
+        int256 profit = int256(amount) *
+            (int256(t.shortPrice) - int256(closePirce));
         traders[msg.sender].shortAmount = t.shortAmount - amount;
         traders[msg.sender].margin = t.margin + profit - int256(fee);
         if (t.shortAmount == amount) {
@@ -357,7 +364,7 @@ contract HedgexSingle is HedgexERC20 {
         poolLongAmount -= amount;
 
         feeCharge(fee, profit);
-        emit Trade(msg.sender, 2, amount, price);
+        emit Trade(msg.sender, 2, amount, closePirce);
     }
 
     //爆仓
@@ -460,16 +467,17 @@ contract HedgexSingle is HedgexERC20 {
     //判定用户开仓条件
     function judegOpen(
         Trader memory t,
-        uint256 price,
+        uint256 indexPrice,
+        uint256 amount,
         uint256 money
     ) internal view returns (uint256) {
-        limitTradeAmount(price, money / price);
+        limitTradeAmount(indexPrice, amount);
         //用户净值
         int256 net = t.margin +
-            int256(t.longAmount * price + t.shortAmount * t.shortPrice) -
-            int256(t.longAmount * t.longPrice + t.shortAmount * price);
+            int256(t.longAmount * indexPrice + t.shortAmount * t.shortPrice) -
+            int256(t.longAmount * t.longPrice + t.shortAmount * indexPrice);
         //已占用保证金量
-        uint256 usedMargin = ((t.longAmount + t.shortAmount) * price) /
+        uint256 usedMargin = ((t.longAmount + t.shortAmount) * indexPrice) /
             leverage;
         //所需保证金
         uint256 needMargin = money / leverage;
@@ -484,16 +492,17 @@ contract HedgexSingle is HedgexERC20 {
 
     //判断用户平仓条件
     //price，当前价格
-    //amount，平仓量
+    //closeAmount，平仓量
     //openAmount，已开仓量
     function judgeClose(
-        uint256 price,
-        uint256 amount,
+        uint256 indexPrice,
+        uint256 closePrice,
+        uint256 closeAmount,
         uint256 openAmount
     ) internal view returns (uint256) {
-        limitTradeAmount(price, amount);
-        require(amount <= openAmount, "position not enough");
-        return (amount * price * feeRate) / divConst;
+        limitTradeAmount(indexPrice, closeAmount);
+        require(closeAmount <= openAmount, "position not enough");
+        return (closeAmount * closePrice * feeRate) / divConst;
     }
 
     //限制用户开平仓量
