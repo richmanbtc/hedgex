@@ -185,7 +185,7 @@ contract HedgexSingle is HedgexERC20 {
             uint256 netAmount = poolLongAmount > poolShortAmount
                 ? (poolLongAmount - poolShortAmount)
                 : (poolShortAmount - poolLongAmount);
-            uint256 usedMargin = (netAmount * price) / leverage;
+            uint256 usedMargin = (netAmount * price); //此处不用除以杠杆率
             require(net > int256(usedMargin), "net need be position");
 
             //计算对冲池可提现金额的最大值
