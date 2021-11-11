@@ -123,6 +123,7 @@ contract HedgexSingle is HedgexERC20 {
         _amountDecimal，开仓量精度或者最小开仓量，此代表10的x次方        
         //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419 ETH mainnet eth/usd price
         //0x8A753747A1Fa494EC906cE90E9f37563A8AF630e rinkeby net eth/usd price
+        //0xcf0f51ca2cDAecb464eeE4227f5295F2384F84ED rinkeby chainlink bnb/usd price, decimal:8
     */
     constructor(
         address _token0,

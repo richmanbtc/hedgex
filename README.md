@@ -3,6 +3,8 @@
 ### single
 ### address : 0xA003566666347dB17fd0aD4e47205901A370A51d
 
+chainlink-rinkeby-bnb/usd : 0xcf0f51ca2cDAecb464eeE4227f5295F2384F84ED
+
 ```json
 {
 	"price_oracle":{
