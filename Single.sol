@@ -15,6 +15,14 @@ contract HedgexSingle is HedgexERC20 {
     }
     */
 
+    uint256 private unlocked = 1;
+    modifier lock() {
+        require(unlocked == 1, "hedgex locked");
+        unlocked = 0;
+        _;
+        unlocked = 1;
+    }
+
     struct Trader {
         int256 margin; //保证金
         uint256 longAmount; //多仓持仓量
@@ -265,7 +273,7 @@ contract HedgexSingle is HedgexERC20 {
 
         Trader memory t = traders[msg.sender];
         uint256 money = amount * openPrice;
-        uint256 fee = judegOpen(t, amount, indexPrice, money);
+        uint256 fee = judegOpen(t, indexPrice, amount, money);
 
         traders[msg.sender].longAmount = t.longAmount + amount;
         traders[msg.sender].longPrice =
