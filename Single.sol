@@ -7,14 +7,6 @@ import "./HedgexERC20.sol";
 
 /// @title Single pair hedge pool contract
 contract HedgexSingle is HedgexERC20 {
-    //确保交易时效性，秒数时间戳
-    /*
-    modifier ensure(uint256 deadline) {
-        require(deadline >= block.timestamp, "HedgexSingle: EXPIRED");
-        _;
-    }
-    */
-
     uint256 private unlocked = 1;
     modifier lock() {
         require(unlocked == 1, "hedgex locked");
@@ -29,6 +21,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 longPrice; //多仓持仓金额
         uint256 shortAmount; //空仓持仓量
         uint256 shortPrice; //空仓持仓金额
+        uint32 interestDay; //已经做过利息检测的时间戳，从时间戳0开始的天数
     }
 
     //各种费率计算时的除数常数
@@ -267,7 +260,7 @@ contract HedgexSingle is HedgexERC20 {
     //开仓做多
     //priceExp，期望价格，如果为0，表示按市价成交
     //amount，开仓量，单位为张
-    function openLong(uint256 priceExp, uint256 amount) public {
+    function openLong(uint256 priceExp, uint256 amount) public lock {
         require(isStart, "contract is not start");
         uint256 indexPrice = getLatestPrice();
 
@@ -338,7 +331,7 @@ contract HedgexSingle is HedgexERC20 {
 
     //平多仓
     //amount单位为“张”
-    function closeLong(uint256 priceExp, uint256 amount) public {
+    function closeLong(uint256 priceExp, uint256 amount) public lock {
         uint256 indexPrice = getLatestPrice();
         //判断净头寸是否符合平仓要求
         int256 R = poolLimitClose(-1, indexPrice, amount);
@@ -365,7 +358,7 @@ contract HedgexSingle is HedgexERC20 {
 
     //平空仓
     //amount单位为“张”
-    function closeShort(uint256 priceExp, uint256 amount) public {
+    function closeShort(uint256 priceExp, uint256 amount) public lock {
         uint256 indexPrice = getLatestPrice();
         //判断净头寸是否符合平仓要求
         int256 R = poolLimitClose(-1, indexPrice, amount);
@@ -393,7 +386,7 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //爆仓
-    function explosive(address account) public {
+    function explosive(address account) public lock {
         Trader memory t = traders[account];
 
         uint256 keepMargin = (t.longAmount *
@@ -433,11 +426,14 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //利息收取
-    function detectSlide(address account) public {
-        uint256 price = getLatestPrice();
+    function detectSlide(address account) public lock {
         Trader storage t = traders[account];
+
+        uint32 dayCount = uint32(block.timestamp / 86400);
+        require(dayCount > t.interestDay, "has been take interest");
         require(t.longAmount != t.shortAmount, "need long and short not equal");
 
+        uint256 price = getLatestPrice();
         uint256 _shortPosition = poolShortAmount;
         uint256 _longPosition = poolLongAmount;
         uint256 interest = 0;
@@ -463,6 +459,7 @@ contract HedgexSingle is HedgexERC20 {
                 _longPosition;
         }
         uint256 reward = (interest * interestRewardRate) / divConst;
+        t.interestDay = dayCount;
         t.margin -= int256(interest);
         totalPool += int256(interest) - int256(reward);
         TransferHelper.safeTransfer(token0, msg.sender, reward);
