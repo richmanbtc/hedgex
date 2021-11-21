@@ -22,6 +22,11 @@ contract HedgexSingle is HedgexERC20 {
         unlocked = 1;
     }
 
+    modifier ensure(uint256 deadline) {
+        require(deadline >= block.timestamp, "Hedgex Trade: EXPIRED");
+        _;
+    }
+
     struct Trader {
         int256 margin; //保证金
         uint256 longAmount; //多仓持仓量
@@ -285,18 +290,17 @@ contract HedgexSingle is HedgexERC20 {
     //开仓做多
     //priceExp，期望价格，如果为0，表示按市价成交
     //amount，开仓量，单位为张
-    function openLong(uint256 priceExp, uint256 amount) public lock {
+    function openLong(
+        uint256 priceExp,
+        uint256 amount,
+        uint256 deadline
+    ) public lock ensure(deadline) {
         require(poolState == 1, "poolState is 2");
         require(isStart, "contract is not start");
         uint256 indexPrice = getLatestPrice();
 
         //判断净头寸比例是否符合开仓要求
-        int256 net = poolTradeLimit(indexPrice, amount);
-
-        Trader memory t = traders[msg.sender];
-        int256 R = ((int256(t.longAmount) - int256(t.shortAmount)) *
-            int256(indexPrice) *
-            int24(divConst)) / net;
+        int256 R = poolLimitTrade(1, indexPrice, amount);
         require(
             R < poolNetAmountRateLimitOpen,
             "pool net amount must small than 30%"
@@ -309,6 +313,7 @@ contract HedgexSingle is HedgexERC20 {
             "open long price is too high"
         );
 
+        Trader memory t = traders[msg.sender];
         uint256 money = amount * openPrice;
         uint256 fee = judegOpen(t, indexPrice, money);
 
@@ -331,28 +336,28 @@ contract HedgexSingle is HedgexERC20 {
     //开仓做空
     //priceExp，期望价格，如果为0，表示按市价成交
     //amount，开仓量，单位为张
-    function openShort(uint256 priceExp, uint256 amount) public {
+    function openShort(
+        uint256 priceExp,
+        uint256 amount,
+        uint256 deadline
+    ) public lock ensure(deadline) {
         require(poolState == 1, "poolState is 2");
         require(isStart, "contract is not start");
         uint256 indexPrice = getLatestPrice();
 
         //判断净头寸比例是否符合开仓要求
-        int256 net = poolTradeLimit(indexPrice, amount);
-
-        Trader memory t = traders[msg.sender];
-        int256 R = ((int256(t.shortAmount) - int256(t.longAmount)) *
-            int256(indexPrice) *
-            int24(divConst)) / net;
+        int256 R = poolLimitTrade(-1, indexPrice, amount);
         require(
             R < poolNetAmountRateLimitOpen,
             "pool net amount must small than 30%"
         );
 
         //叠加价格偏移量
-        uint256 openPrice = indexPrice + slideTradePrice(indexPrice, R);
+        uint256 openPrice = indexPrice - slideTradePrice(indexPrice, R);
         require(openPrice >= priceExp, "open short price is too low");
 
         uint256 money = amount * openPrice;
+        Trader memory t = traders[msg.sender];
         uint256 fee = judegOpen(t, indexPrice, money);
 
         traders[msg.sender].shortAmount = t.shortAmount + amount;
@@ -371,21 +376,21 @@ contract HedgexSingle is HedgexERC20 {
 
     //平多仓
     //amount单位为“张”
-    function closeLong(uint256 priceExp, uint256 amount) public lock {
+    function closeLong(
+        uint256 priceExp,
+        uint256 amount,
+        uint256 deadline
+    ) public lock ensure(deadline) {
         require(poolState == 1, "poolState is 2");
         uint256 indexPrice = getLatestPrice();
+
         //判断净头寸是否符合平仓要求
-
-        int256 net = poolTradeLimit(indexPrice, amount);
-
-        Trader memory t = traders[msg.sender];
-        int256 R = ((int256(t.shortAmount) - int256(t.longAmount)) *
-            int256(indexPrice) *
-            int24(divConst)) / net;
+        int256 R = poolLimitTrade(-1, indexPrice, amount);
 
         uint256 closePrice = indexPrice - slideTradePrice(indexPrice, R);
         require(closePrice >= priceExp, "close long price is lower");
 
+        Trader memory t = traders[msg.sender];
         require(t.longAmount >= amount, "close amount require >= longAmount");
         uint256 fee = (amount * closePrice * feeRate) / divConst;
 
@@ -404,16 +409,16 @@ contract HedgexSingle is HedgexERC20 {
 
     //平空仓
     //amount单位为“张”
-    function closeShort(uint256 priceExp, uint256 amount) public lock {
+    function closeShort(
+        uint256 priceExp,
+        uint256 amount,
+        uint256 deadline
+    ) public lock ensure(deadline) {
         require(poolState == 1, "poolState is 2");
         uint256 indexPrice = getLatestPrice();
-        //判断净头寸是否符合平仓要求
-        int256 net = poolTradeLimit(indexPrice, amount);
 
-        Trader memory t = traders[msg.sender];
-        int256 R = ((int256(t.longAmount) - int256(t.shortAmount)) *
-            int256(indexPrice) *
-            int24(divConst)) / net;
+        //判断净头寸是否符合平仓要求
+        int256 R = poolLimitTrade(1, indexPrice, amount);
 
         uint256 closePrice = indexPrice + slideTradePrice(indexPrice, R);
         require(
@@ -421,6 +426,7 @@ contract HedgexSingle is HedgexERC20 {
             "close short price is higher"
         );
 
+        Trader memory t = traders[msg.sender];
         require(t.shortAmount >= amount, "close amount require >= shortAmount");
         uint256 fee = (amount * closePrice * feeRate) / divConst;
 
@@ -632,21 +638,26 @@ contract HedgexSingle is HedgexERC20 {
         return net;
     }
 
-    //判断对冲池的开仓的限制
+    //判断对冲池的开平仓的限制，返回流动池净头寸率
     //d为开仓方向，+1表示开多，-1表示开空
     //inP为指数价格
     //amount为开仓量
-    function poolTradeLimit(uint256 inP, uint256 amount)
-        internal
-        view
-        returns (int256)
-    {
+    function poolLimitTrade(
+        int8 d,
+        uint256 inP,
+        uint256 amount
+    ) internal view returns (int256) {
         int256 net = getPoolNet(inP);
         require(
             amount <= ((uint256(net) * singleTradeLimitRate) / divConst) / inP,
             "single amount over net * rate"
         );
-        return net;
+
+        return
+            (d *
+                (int256(poolShortAmount) - int256(poolLongAmount)) *
+                int256(inP) *
+                int24(divConst)) / net;
     }
 
     //计算交易价格的偏移量
@@ -660,8 +671,8 @@ contract HedgexSingle is HedgexERC20 {
             slideRate = uint256(
                 poolNetAmountRateLimitPrice /
                     10 +
-                    ((R - (poolNetAmountRateLimitPrice * 3) / 2) * 5) /
-                    2
+                    (2 * R - 3 * poolNetAmountRateLimitPrice) /
+                    5
             );
         } else if (R >= poolNetAmountRateLimitPrice) {
             slideRate = uint256(R - poolNetAmountRateLimitPrice) / 5;
