@@ -7,6 +7,13 @@ import "./HedgexERC20.sol";
 
 /// @title Single pair hedge pool contract
 contract HedgexSingle is HedgexERC20 {
+    uint8 public poolState; //合约状态，1：正常运行，2：pool处于爆仓状态
+    uint256 public poolExplosivePrice; //合约爆仓价格，爆仓时锁定此价格
+    uint24 public constant poolLeftAmountRate = 50000; //爆仓时，pool净值如果小于此比例，则按照此比例推算爆仓价格
+    uint256 public constant foceCloseRewardGas = 1000000000;
+    //0.001376BNB 137616 gas
+    //0.000869
+
     uint256 private unlocked = 1;
     modifier lock() {
         require(unlocked == 1, "hedgex locked");
@@ -90,6 +97,17 @@ contract HedgexSingle is HedgexERC20 {
     //获取到的合约价格精度
     uint256 public immutable feedPriceDecimal;
 
+    //chainlink eth mainnet :
+    //      bnbusd : 0x14e613AC84a31f709eadbdF89C6CC390fDc9540A
+    //      ethusd : 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
+    //chainlink eth rinkeby :
+    //      bnbusd : 0xcf0f51ca2cDAecb464eeE4227f5295F2384F84ED
+    //      ethusd : 0x8A753747A1Fa494EC906cE90E9f37563A8AF630e
+    //chainlink bsc test :
+    //      bnbusd : 0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526
+    address public immutable gasUsdPriceFeed =
+        0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526;
+
     event Mint(address indexed sender, uint256 amount); //增加流动性
     event Burn(address indexed sender, uint256 amount); //移除流动性
     event Recharge(address indexed sender, uint256 amount); //充值保证金
@@ -112,6 +130,12 @@ contract HedgexSingle is HedgexERC20 {
         uint256 amount,
         uint256 price
     ); //收取利息，price为持仓价，amount为收取的利息量
+    event ForceClose(
+        address indexed account,
+        uint256 long,
+        uint256 short,
+        uint256 price
+    );
 
     /*
         _token0, 保证金代币的合约地址
@@ -132,6 +156,7 @@ contract HedgexSingle is HedgexERC20 {
         uint8 _leverage,
         int8 _amountDecimal
     ) HedgexERC20(IERC20(_token0).decimals()) {
+        poolState = 1;
         feedPrice = AggregatorV3Interface(_feedPrice);
         token0 = _token0;
         token0Decimal = 10**(IERC20(_token0).decimals());
@@ -156,6 +181,7 @@ contract HedgexSingle is HedgexERC20 {
     //amount, token0的总量
     //to 用户lp token的接收地址，新产生的lp会发送到此地址
     function addLiquidity(uint256 amount, address to) external {
+        require(poolState == 1, "poolState is 2");
         //向合约地址发送token0代币，需要提前调用approve授权，要授权给合约地址token0的数量
         TransferHelper.safeTransferFrom(
             token0,
@@ -185,6 +211,7 @@ contract HedgexSingle is HedgexERC20 {
     //liquidity, 发送到合约地址的lp代币数量
     //to, token0代币的接收地址
     function removeLiquidity(uint256 liquidity, address to) external {
+        require(poolState == 1, "poolState is 2");
         uint256 amount = liquidity;
         if (isStart) {
             uint256 price = getLatestPrice();
@@ -197,18 +224,15 @@ contract HedgexSingle is HedgexERC20 {
             if (netAmount < totalAmount) {
                 netAmount = totalAmount;
             }
-            uint256 usedMargin = (netAmount * price); //此处不用除以杠杆率
+            uint256 usedMargin = ((netAmount * price) * divConst) /
+                uint24(poolNetAmountRateLimitOpen);
 
-            require(net > int256(usedMargin), "net need be position");
+            require(net > int256(usedMargin), "net must > usedMargin/R");
 
             //计算对冲池可提现金额的最大值
             uint256 canWithdraw = uint256(net) - usedMargin;
-            uint256 sNet = uint256(net) / 10;
-            if (canWithdraw > sNet) {
-                canWithdraw = sNet;
-            }
             amount = (uint256(net) * liquidity) / totalSupply;
-            require(amount <= canWithdraw, "withdraw amount too much");
+            require(amount <= canWithdraw, "withdraw amount too many");
         }
         totalPool -= int256(amount);
         _burn(msg.sender, liquidity); //销毁用户lp代币
@@ -232,6 +256,7 @@ contract HedgexSingle is HedgexERC20 {
 
     //用户提取保证金
     function withdrawMargin(uint256 amount) external {
+        require(poolState == 1, "poolState is 2");
         Trader memory t = traders[msg.sender];
 
         //当前价格
@@ -261,11 +286,21 @@ contract HedgexSingle is HedgexERC20 {
     //priceExp，期望价格，如果为0，表示按市价成交
     //amount，开仓量，单位为张
     function openLong(uint256 priceExp, uint256 amount) public lock {
+        require(poolState == 1, "poolState is 2");
         require(isStart, "contract is not start");
         uint256 indexPrice = getLatestPrice();
 
         //判断净头寸比例是否符合开仓要求
-        int256 R = poolLimitOpen(1, indexPrice, amount);
+        int256 net = poolTradeLimit(indexPrice, amount);
+
+        Trader memory t = traders[msg.sender];
+        int256 R = ((int256(t.longAmount) - int256(t.shortAmount)) *
+            int256(indexPrice) *
+            int24(divConst)) / net;
+        require(
+            R < poolNetAmountRateLimitOpen,
+            "pool net amount must small than 30%"
+        );
 
         //叠加价格偏移量
         uint256 openPrice = indexPrice + slideTradePrice(indexPrice, R);
@@ -275,7 +310,7 @@ contract HedgexSingle is HedgexERC20 {
         );
 
         uint256 money = amount * openPrice;
-        (uint256 fee, Trader memory t) = judegOpen(indexPrice, money);
+        uint256 fee = judegOpen(t, indexPrice, money);
 
         traders[msg.sender].longAmount = t.longAmount + amount;
         traders[msg.sender].longPrice =
@@ -296,24 +331,29 @@ contract HedgexSingle is HedgexERC20 {
     //开仓做空
     //priceExp，期望价格，如果为0，表示按市价成交
     //amount，开仓量，单位为张
-    //rechargeAmount, 转入的保证金量
-    function openShort(
-        uint256 priceExp,
-        uint256 amount,
-        uint256 rechargeAmount
-    ) public {
+    function openShort(uint256 priceExp, uint256 amount) public {
+        require(poolState == 1, "poolState is 2");
         require(isStart, "contract is not start");
         uint256 indexPrice = getLatestPrice();
 
         //判断净头寸比例是否符合开仓要求
-        int256 R = poolLimitOpen(-1, indexPrice, amount);
+        int256 net = poolTradeLimit(indexPrice, amount);
+
+        Trader memory t = traders[msg.sender];
+        int256 R = ((int256(t.shortAmount) - int256(t.longAmount)) *
+            int256(indexPrice) *
+            int24(divConst)) / net;
+        require(
+            R < poolNetAmountRateLimitOpen,
+            "pool net amount must small than 30%"
+        );
 
         //叠加价格偏移量
         uint256 openPrice = indexPrice + slideTradePrice(indexPrice, R);
         require(openPrice >= priceExp, "open short price is too low");
 
         uint256 money = amount * openPrice;
-        (uint256 fee, Trader memory t) = judegOpen(indexPrice, money);
+        uint256 fee = judegOpen(t, indexPrice, money);
 
         traders[msg.sender].shortAmount = t.shortAmount + amount;
         traders[msg.sender].shortPrice =
@@ -332,14 +372,20 @@ contract HedgexSingle is HedgexERC20 {
     //平多仓
     //amount单位为“张”
     function closeLong(uint256 priceExp, uint256 amount) public lock {
+        require(poolState == 1, "poolState is 2");
         uint256 indexPrice = getLatestPrice();
         //判断净头寸是否符合平仓要求
-        int256 R = poolLimitClose(-1, indexPrice, amount);
+
+        int256 net = poolTradeLimit(indexPrice, amount);
+
+        Trader memory t = traders[msg.sender];
+        int256 R = ((int256(t.shortAmount) - int256(t.longAmount)) *
+            int256(indexPrice) *
+            int24(divConst)) / net;
 
         uint256 closePrice = indexPrice - slideTradePrice(indexPrice, R);
         require(closePrice >= priceExp, "close long price is lower");
 
-        Trader memory t = traders[msg.sender];
         require(t.longAmount >= amount, "close amount require >= longAmount");
         uint256 fee = (amount * closePrice * feeRate) / divConst;
 
@@ -359,16 +405,22 @@ contract HedgexSingle is HedgexERC20 {
     //平空仓
     //amount单位为“张”
     function closeShort(uint256 priceExp, uint256 amount) public lock {
+        require(poolState == 1, "poolState is 2");
         uint256 indexPrice = getLatestPrice();
         //判断净头寸是否符合平仓要求
-        int256 R = poolLimitClose(-1, indexPrice, amount);
+        int256 net = poolTradeLimit(indexPrice, amount);
+
+        Trader memory t = traders[msg.sender];
+        int256 R = ((int256(t.longAmount) - int256(t.shortAmount)) *
+            int256(indexPrice) *
+            int24(divConst)) / net;
 
         uint256 closePrice = indexPrice + slideTradePrice(indexPrice, R);
         require(
             closePrice <= priceExp || priceExp == 0,
             "close short price is higher"
         );
-        Trader memory t = traders[msg.sender];
+
         require(t.shortAmount >= amount, "close amount require >= shortAmount");
         uint256 fee = (amount * closePrice * feeRate) / divConst;
 
@@ -387,6 +439,7 @@ contract HedgexSingle is HedgexERC20 {
 
     //爆仓
     function explosive(address account) public lock {
+        require(poolState == 1, "poolState is 2");
         Trader memory t = traders[account];
 
         uint256 keepMargin = (t.longAmount *
@@ -427,9 +480,13 @@ contract HedgexSingle is HedgexERC20 {
 
     //利息收取
     function detectSlide(address account) public lock {
-        Trader storage t = traders[account];
-
+        require(poolState == 1, "poolState is 2");
         uint32 dayCount = uint32(block.timestamp / 86400);
+        require(
+            block.timestamp - uint256(dayCount * 86400) <= 300,
+            "not the time for take interest"
+        );
+        Trader storage t = traders[account];
         require(dayCount > t.interestDay, "has been take interest");
         require(t.longAmount != t.shortAmount, "need long and short not equal");
 
@@ -467,6 +524,95 @@ contract HedgexSingle is HedgexERC20 {
         emit TakeInterest(account, direction, interest, price);
     }
 
+    //对冲池爆仓
+    function explosivePool() public lock {
+        require(poolState == 1, "pool is explosiving");
+        uint256 indexPrice = getLatestPrice();
+        int256 poolNet = getPoolNet(indexPrice);
+        uint256 keepMargin = poolLongAmount > poolShortAmount
+            ? ((poolLongAmount - poolShortAmount) * indexPrice) / 5
+            : ((poolShortAmount - poolLongAmount) * indexPrice) / 5;
+        //如果pool净值小于等于维持保证金数量，则进入爆仓流程
+        require(poolNet <= int256(keepMargin), "pool cann't be explosived");
+        poolState = 2; //设定爆仓状态
+
+        //计算爆仓价格
+        int256 leftAmount = int256(keepMargin / 4);
+        if (poolNet < leftAmount) {
+            require(totalPool > leftAmount, "totalPool must > left");
+            uint256 ePrice = 0; //爆仓价格
+            if (poolLongAmount > poolShortAmount) {
+                ePrice =
+                    poolLongPrice +
+                    uint256(totalPool - leftAmount) /
+                    (poolLongAmount - poolShortAmount);
+            } else if (poolShortAmount > poolLongAmount) {
+                ePrice =
+                    uint256(totalPool - leftAmount) /
+                    (poolShortAmount - poolLongAmount) +
+                    poolShortPrice;
+            }
+            poolExplosivePrice = ePrice;
+            totalPool = leftAmount;
+        } else {
+            totalPool = poolNet;
+            poolExplosivePrice = indexPrice;
+        }
+        poolLongPrice = poolShortPrice = 0;
+    }
+
+    //强制按照爆仓价对用户平仓
+    function forceCloseAccount(address account) public lock {
+        require(poolState == 2, "poolState is not 2");
+        Trader memory t = traders[account];
+        require(t.longAmount > 0 || t.shortAmount > 0, "");
+        int256 net = getAccountNet(t, poolExplosivePrice);
+
+        uint256 fee = ((t.longAmount *
+            poolExplosivePrice +
+            t.shortAmount *
+            poolExplosivePrice) * feeRate) / divConst;
+
+        //对冲池多空仓减掉相应数量
+        if (t.longAmount > 0) {
+            poolShortAmount -= t.longAmount;
+        }
+        if (t.shortAmount > 0) {
+            poolLongAmount -= t.shortAmount;
+        }
+        //如果所有用户的仓位都平掉了，合约状态从爆仓中恢复
+        if (poolLongAmount <= 0 && poolShortAmount <= 0) {
+            poolState = 1;
+        }
+
+        //用户账户所有数值清空
+        if (net > int256(fee)) {
+            traders[account].margin = net - int256(fee);
+            totalPool += int256(fee);
+        } else {
+            traders[account].margin = 0;
+            totalPool += net;
+        }
+        traders[account].longAmount = 0;
+        traders[account].longPrice = 0;
+        traders[account].shortAmount = 0;
+        traders[account].shortPrice = 0;
+
+        uint256 reward = (foceCloseRewardGas *
+            getGasUsdPrice() *
+            token0Decimal) / 100000000000000000000000000;
+
+        totalPool -= int256(reward);
+        TransferHelper.safeTransfer(token0, msg.sender, reward);
+
+        emit ForceClose(
+            account,
+            t.longAmount,
+            t.shortAmount,
+            poolExplosivePrice
+        );
+    }
+
     //获取当前对冲池的净值，数值为token0的带精度数量
     function getPoolNet() public view returns (int256) {
         uint256 price = getLatestPrice();
@@ -490,46 +636,17 @@ contract HedgexSingle is HedgexERC20 {
     //d为开仓方向，+1表示开多，-1表示开空
     //inP为指数价格
     //amount为开仓量
-    function poolLimitOpen(
-        int8 d,
-        uint256 inP,
-        uint256 amount
-    ) internal view returns (int256) {
+    function poolTradeLimit(uint256 inP, uint256 amount)
+        internal
+        view
+        returns (int256)
+    {
         int256 net = getPoolNet(inP);
         require(
             amount <= ((uint256(net) * singleTradeLimitRate) / divConst) / inP,
             "single amount over net * rate"
         );
-        int256 R = (d *
-            (int256(poolShortAmount) - int256(poolLongAmount)) *
-            int256(inP) *
-            int24(divConst)) / net;
-        require(
-            R < poolNetAmountRateLimitOpen,
-            "pool net amount must small than 30%"
-        );
-        return R;
-    }
-
-    //判断对冲池的开仓的限制
-    //d为开仓方向，+1表示开多，-1表示开空
-    //inP为指数价格
-    //amount为开仓量
-    function poolLimitClose(
-        int8 d,
-        uint256 inP,
-        uint256 amount
-    ) internal view returns (int256) {
-        int256 net = getPoolNet(inP);
-        require(
-            amount <= ((uint256(net) * singleTradeLimitRate) / divConst) / inP,
-            "amount over net*rate"
-        );
-        return
-            (d *
-                (int256(poolShortAmount) - int256(poolLongAmount)) *
-                int256(inP) *
-                int24(divConst)) / net;
+        return net;
     }
 
     //计算交易价格的偏移量
@@ -549,16 +666,16 @@ contract HedgexSingle is HedgexERC20 {
         } else if (R >= poolNetAmountRateLimitPrice) {
             slideRate = uint256(R - poolNetAmountRateLimitPrice) / 5;
         }
-        slideRate += (inP * slideP) / divConst;
+        slideRate = (inP * (slideRate + slideP)) / divConst;
         return slideRate;
     }
 
     //判定用户开仓条件
-    function judegOpen(uint256 indexPrice, uint256 money)
-        internal
-        returns (uint256, Trader memory)
-    {
-        Trader memory t = traders[msg.sender];
+    function judegOpen(
+        Trader memory t,
+        uint256 indexPrice,
+        uint256 money
+    ) internal returns (uint256) {
         //用户净值
         int256 net = t.margin +
             int256(t.longAmount * indexPrice + t.shortAmount * t.shortPrice) -
@@ -578,7 +695,7 @@ contract HedgexSingle is HedgexERC20 {
             rechargeMargin(uint256(needRechargeMargin));
             t = traders[msg.sender];
         }
-        return (fee, t);
+        return fee;
     }
 
     //对冲池结算手续费
@@ -638,5 +755,11 @@ contract HedgexSingle is HedgexERC20 {
             (uint256(price) * token0Decimal) /
             10**uint8(-amountDecimal) /
             feedPriceDecimal;
+    }
+
+    function getGasUsdPrice() public view returns (uint256) {
+        (, int256 price, , , ) = AggregatorV3Interface(gasUsdPriceFeed)
+            .latestRoundData();
+        return uint256(price);
     }
 }
