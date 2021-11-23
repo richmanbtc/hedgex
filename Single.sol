@@ -48,8 +48,11 @@ contract HedgexSingle is HedgexERC20 {
     //杠杆率
     uint8 public immutable leverage;
 
-    //单笔交易数量限制，对冲池净值比例，3%
-    uint16 public constant singleTradeLimitRate = 30000;
+    //单笔交易开仓数量限制，对冲池净值比例，3%
+    uint16 public constant singleOpenLimitRate = 30000;
+
+    //单笔交易平仓数量限制，对冲池净值比例，3%
+    uint24 public constant singleCloseLimitRate = 100000;
 
     //对冲池净头寸比例，在开仓时的限制边界值
     int24 public constant poolNetAmountRateLimitOpen = 300000;
@@ -300,7 +303,12 @@ contract HedgexSingle is HedgexERC20 {
         uint256 indexPrice = getLatestPrice();
 
         //判断净头寸比例是否符合开仓要求
-        int256 R = poolLimitTrade(1, indexPrice, amount);
+        (int256 R, int256 net) = poolLimitTrade(1, indexPrice);
+        require(
+            amount <=
+                ((uint256(net) * singleOpenLimitRate) / divConst) / indexPrice,
+            "single amount over net * rate"
+        );
         require(
             R < poolNetAmountRateLimitOpen,
             "pool net amount must small than 30%"
@@ -346,7 +354,12 @@ contract HedgexSingle is HedgexERC20 {
         uint256 indexPrice = getLatestPrice();
 
         //判断净头寸比例是否符合开仓要求
-        int256 R = poolLimitTrade(-1, indexPrice, amount);
+        (int256 R, int256 net) = poolLimitTrade(-1, indexPrice);
+        require(
+            amount <=
+                ((uint256(net) * singleOpenLimitRate) / divConst) / indexPrice,
+            "single amount over net * rate"
+        );
         require(
             R < poolNetAmountRateLimitOpen,
             "pool net amount must small than 30%"
@@ -385,7 +398,12 @@ contract HedgexSingle is HedgexERC20 {
         uint256 indexPrice = getLatestPrice();
 
         //判断净头寸是否符合平仓要求
-        int256 R = poolLimitTrade(-1, indexPrice, amount);
+        (int256 R, int256 net) = poolLimitTrade(-1, indexPrice);
+        require(
+            amount <=
+                ((uint256(net) * singleCloseLimitRate) / divConst) / indexPrice,
+            "single amount over net * rate"
+        );
 
         uint256 closePrice = indexPrice - slideTradePrice(indexPrice, R);
         require(closePrice >= priceExp, "close long price is lower");
@@ -418,7 +436,12 @@ contract HedgexSingle is HedgexERC20 {
         uint256 indexPrice = getLatestPrice();
 
         //判断净头寸是否符合平仓要求
-        int256 R = poolLimitTrade(1, indexPrice, amount);
+        (int256 R, int256 net) = poolLimitTrade(1, indexPrice);
+        require(
+            amount <=
+                ((uint256(net) * singleCloseLimitRate) / divConst) / indexPrice,
+            "single amount over net * rate"
+        );
 
         uint256 closePrice = indexPrice + slideTradePrice(indexPrice, R);
         require(
@@ -642,22 +665,19 @@ contract HedgexSingle is HedgexERC20 {
     //d为开仓方向，+1表示开多，-1表示开空
     //inP为指数价格
     //amount为开仓量
-    function poolLimitTrade(
-        int8 d,
-        uint256 inP,
-        uint256 amount
-    ) internal view returns (int256) {
+    function poolLimitTrade(int8 d, uint256 inP)
+        internal
+        view
+        returns (int256, int256)
+    {
         int256 net = getPoolNet(inP);
-        require(
-            amount <= ((uint256(net) * singleTradeLimitRate) / divConst) / inP,
-            "single amount over net * rate"
-        );
-
-        return
+        return (
             (d *
                 (int256(poolShortAmount) - int256(poolLongAmount)) *
                 int256(inP) *
-                int24(divConst)) / net;
+                int24(divConst)) / net,
+            net
+        );
     }
 
     //计算交易价格的偏移量

@@ -997,33 +997,33 @@
         "absolutePath": "d:/contract/hedgex/interfaces/IUniswapV3Pool.sol",
         "exportedSymbols": {
             "IUniswapV3Pool": [
-                3457
+                3520
             ],
             "IUniswapV3PoolActions": [
-                3553
+                3616
             ],
             "IUniswapV3PoolDerivedState": [
-                3584
+                3647
             ],
             "IUniswapV3PoolEvents": [
-                3703
+                3766
             ],
             "IUniswapV3PoolImmutables": [
-                3743
+                3806
             ],
             "IUniswapV3PoolOwnerActions": [
-                3769
+                3832
             ],
             "IUniswapV3PoolState": [
-                3877
+                3940
             ]
         },
-        "id": 3458,
+        "id": 3521,
         "license": "GPL-2.0-or-later",
         "nodeType": "SourceUnit",
         "nodes": [
             {
-                "id": 3437,
+                "id": 3500,
                 "literals": [
                     "solidity",
                     ">=",
@@ -1036,11 +1036,11 @@
             {
                 "absolutePath": "d:/contract/hedgex/interfaces/pool/IUniswapV3PoolImmutables.sol",
                 "file": "./pool/IUniswapV3PoolImmutables.sol",
-                "id": 3438,
+                "id": 3501,
                 "nameLocation": "-1:-1:-1",
                 "nodeType": "ImportDirective",
-                "scope": 3458,
-                "sourceUnit": 3744,
+                "scope": 3521,
+                "sourceUnit": 3807,
                 "src": "71:45:6",
                 "symbolAliases": [],
                 "unitAlias": ""
@@ -1048,11 +1048,11 @@
             {
                 "absolutePath": "d:/contract/hedgex/interfaces/pool/IUniswapV3PoolState.sol",
                 "file": "./pool/IUniswapV3PoolState.sol",
-                "id": 3439,
+                "id": 3502,
                 "nameLocation": "-1:-1:-1",
                 "nodeType": "ImportDirective",
-                "scope": 3458,
-                "sourceUnit": 3878,
+                "scope": 3521,
+                "sourceUnit": 3941,
                 "src": "117:40:6",
                 "symbolAliases": [],
                 "unitAlias": ""
@@ -1060,11 +1060,11 @@
             {
                 "absolutePath": "d:/contract/hedgex/interfaces/pool/IUniswapV3PoolDerivedState.sol",
                 "file": "./pool/IUniswapV3PoolDerivedState.sol",
-                "id": 3440,
+                "id": 3503,
                 "nameLocation": "-1:-1:-1",
                 "nodeType": "ImportDirective",
-                "scope": 3458,
-                "sourceUnit": 3585,
+                "scope": 3521,
+                "sourceUnit": 3648,
                 "src": "158:47:6",
                 "symbolAliases": [],
                 "unitAlias": ""
@@ -1072,11 +1072,11 @@
             {
                 "absolutePath": "d:/contract/hedgex/interfaces/pool/IUniswapV3PoolActions.sol",
                 "file": "./pool/IUniswapV3PoolActions.sol",
-                "id": 3441,
+                "id": 3504,
                 "nameLocation": "-1:-1:-1",
                 "nodeType": "ImportDirective",
-                "scope": 3458,
-                "sourceUnit": 3554,
+                "scope": 3521,
+                "sourceUnit": 3617,
                 "src": "206:42:6",
                 "symbolAliases": [],
                 "unitAlias": ""
@@ -1084,11 +1084,11 @@
             {
                 "absolutePath": "d:/contract/hedgex/interfaces/pool/IUniswapV3PoolOwnerActions.sol",
                 "file": "./pool/IUniswapV3PoolOwnerActions.sol",
-                "id": 3442,
+                "id": 3505,
                 "nameLocation": "-1:-1:-1",
                 "nodeType": "ImportDirective",
-                "scope": 3458,
-                "sourceUnit": 3770,
+                "scope": 3521,
+                "sourceUnit": 3833,
                 "src": "249:47:6",
                 "symbolAliases": [],
                 "unitAlias": ""
@@ -1096,11 +1096,11 @@
             {
                 "absolutePath": "d:/contract/hedgex/interfaces/pool/IUniswapV3PoolEvents.sol",
                 "file": "./pool/IUniswapV3PoolEvents.sol",
-                "id": 3443,
+                "id": 3506,
                 "nameLocation": "-1:-1:-1",
                 "nodeType": "ImportDirective",
-                "scope": 3458,
-                "sourceUnit": 3704,
+                "scope": 3521,
+                "sourceUnit": 3767,
                 "src": "297:41:6",
                 "symbolAliases": [],
                 "unitAlias": ""
@@ -1110,73 +1110,73 @@
                 "baseContracts": [
                     {
                         "baseName": {
-                            "id": 3445,
+                            "id": 3508,
                             "name": "IUniswapV3PoolImmutables",
                             "nodeType": "IdentifierPath",
-                            "referencedDeclaration": 3743,
+                            "referencedDeclaration": 3806,
                             "src": "637:24:6"
                         },
-                        "id": 3446,
+                        "id": 3509,
                         "nodeType": "InheritanceSpecifier",
                         "src": "637:24:6"
                     },
                     {
                         "baseName": {
-                            "id": 3447,
+                            "id": 3510,
                             "name": "IUniswapV3PoolState",
                             "nodeType": "IdentifierPath",
-                            "referencedDeclaration": 3877,
+                            "referencedDeclaration": 3940,
                             "src": "667:19:6"
                         },
-                        "id": 3448,
+                        "id": 3511,
                         "nodeType": "InheritanceSpecifier",
                         "src": "667:19:6"
                     },
                     {
                         "baseName": {
-                            "id": 3449,
+                            "id": 3512,
                             "name": "IUniswapV3PoolDerivedState",
                             "nodeType": "IdentifierPath",
-                            "referencedDeclaration": 3584,
+                            "referencedDeclaration": 3647,
                             "src": "692:26:6"
                         },
-                        "id": 3450,
+                        "id": 3513,
                         "nodeType": "InheritanceSpecifier",
                         "src": "692:26:6"
                     },
                     {
                         "baseName": {
-                            "id": 3451,
+                            "id": 3514,
                             "name": "IUniswapV3PoolActions",
                             "nodeType": "IdentifierPath",
-                            "referencedDeclaration": 3553,
+                            "referencedDeclaration": 3616,
                             "src": "724:21:6"
                         },
-                        "id": 3452,
+                        "id": 3515,
                         "nodeType": "InheritanceSpecifier",
                         "src": "724:21:6"
                     },
                     {
                         "baseName": {
-                            "id": 3453,
+                            "id": 3516,
                             "name": "IUniswapV3PoolOwnerActions",
                             "nodeType": "IdentifierPath",
-                            "referencedDeclaration": 3769,
+                            "referencedDeclaration": 3832,
                             "src": "751:26:6"
                         },
-                        "id": 3454,
+                        "id": 3517,
                         "nodeType": "InheritanceSpecifier",
                         "src": "751:26:6"
                     },
                     {
                         "baseName": {
-                            "id": 3455,
+                            "id": 3518,
                             "name": "IUniswapV3PoolEvents",
                             "nodeType": "IdentifierPath",
-                            "referencedDeclaration": 3703,
+                            "referencedDeclaration": 3766,
                             "src": "783:20:6"
                         },
-                        "id": 3456,
+                        "id": 3519,
                         "nodeType": "InheritanceSpecifier",
                         "src": "783:20:6"
                     }
@@ -1185,27 +1185,27 @@
                 "contractDependencies": [],
                 "contractKind": "interface",
                 "documentation": {
-                    "id": 3444,
+                    "id": 3507,
                     "nodeType": "StructuredDocumentation",
                     "src": "340:265:6",
                     "text": "@title The interface for a Uniswap V3 Pool\n @notice A Uniswap pool facilitates swapping and automated market making between any two assets that strictly conform\n to the ERC20 specification\n @dev The pool interface is broken up into many smaller pieces"
                 },
                 "fullyImplemented": false,
-                "id": 3457,
+                "id": 3520,
                 "linearizedBaseContracts": [
-                    3457,
-                    3703,
-                    3769,
-                    3553,
-                    3584,
-                    3877,
-                    3743
+                    3520,
+                    3766,
+                    3832,
+                    3616,
+                    3647,
+                    3940,
+                    3806
                 ],
                 "name": "IUniswapV3Pool",
                 "nameLocation": "615:14:6",
                 "nodeType": "ContractDefinition",
                 "nodes": [],
-                "scope": 3458,
+                "scope": 3521,
                 "src": "605:203:6",
                 "usedErrors": []
             }
