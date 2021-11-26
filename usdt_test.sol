@@ -7,16 +7,25 @@ contract TokenERC20 is IERC20 {
     string public override symbol = "USDT";
     uint8 public override decimals = 6;
     uint256 public override totalSupply;
+    address public minter;
 
     // 建立映射 地址对应了 uint' 便是他的余额
     mapping(address => uint256) public override balanceOf;
     // 地址对应余额
     mapping(address => mapping(address => uint256)) public override allowance;
 
+    event Mint(address indexed sender, uint256 amount); //增加流动性
+
     // 这里是构造函数, 实例创建时候执行
     constructor() {
-        totalSupply = 10000000000 * 10**uint256(decimals); // 这里确定了总发行量
-        balanceOf[msg.sender] = totalSupply; // 这里就比较重要, 这里相当于实现了, 把token 全部给合约的Creator
+        totalSupply = 10000000000 * 10**uint256(decimals);
+        balanceOf[msg.sender] = totalSupply;
+        minter = msg.sender;
+    }
+
+    function mint(uint256 amount) public {
+        require(minter == msg.sender);
+        balanceOf[minter] += amount;
     }
 
     function _approve(

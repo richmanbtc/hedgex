@@ -89,28 +89,28 @@
         "absolutePath": "d:/contract/hedgex/IndexPrice.sol",
         "exportedSymbols": {
             "AggregatorV3Interface": [
-                3414
+                3412
             ],
             "IUniswapV3Pool": [
-                3520
+                3518
             ],
             "IUniswapV3PoolActions": [
-                3616
+                3614
             ],
             "IUniswapV3PoolDerivedState": [
-                3647
+                3645
             ],
             "IUniswapV3PoolEvents": [
-                3766
+                3764
             ],
             "IUniswapV3PoolImmutables": [
-                3806
+                3804
             ],
             "IUniswapV3PoolOwnerActions": [
-                3832
+                3830
             ],
             "IUniswapV3PoolState": [
-                3940
+                3938
             ],
             "IndexPrice": [
                 645
@@ -138,7 +138,7 @@
                 "nameLocation": "-1:-1:-1",
                 "nodeType": "ImportDirective",
                 "scope": 646,
-                "sourceUnit": 3521,
+                "sourceUnit": 3519,
                 "src": "65:41:2",
                 "symbolAliases": [],
                 "unitAlias": ""
@@ -150,7 +150,7 @@
                 "nameLocation": "-1:-1:-1",
                 "nodeType": "ImportDirective",
                 "scope": 646,
-                "sourceUnit": 3415,
+                "sourceUnit": 3413,
                 "src": "108:48:2",
                 "symbolAliases": [],
                 "unitAlias": ""
@@ -582,10 +582,10 @@
                                                     "name": "AggregatorV3Interface",
                                                     "nodeType": "Identifier",
                                                     "overloadedDeclarations": [],
-                                                    "referencedDeclaration": 3414,
+                                                    "referencedDeclaration": 3412,
                                                     "src": "589:21:2",
                                                     "typeDescriptions": {
-                                                        "typeIdentifier": "t_type$_t_contract$_AggregatorV3Interface_$3414_$",
+                                                        "typeIdentifier": "t_type$_t_contract$_AggregatorV3Interface_$3412_$",
                                                         "typeString": "type(contract AggregatorV3Interface)"
                                                     }
                                                 },
@@ -600,7 +600,7 @@
                                                 "src": "589:33:2",
                                                 "tryCall": false,
                                                 "typeDescriptions": {
-                                                    "typeIdentifier": "t_contract$_AggregatorV3Interface_$3414",
+                                                    "typeIdentifier": "t_contract$_AggregatorV3Interface_$3412",
                                                     "typeString": "contract AggregatorV3Interface"
                                                 }
                                             },
@@ -611,7 +611,7 @@
                                             "lValueRequested": false,
                                             "memberName": "latestRoundData",
                                             "nodeType": "MemberAccess",
-                                            "referencedDeclaration": 3413,
+                                            "referencedDeclaration": 3411,
                                             "src": "589:63:2",
                                             "typeDescriptions": {
                                                 "typeIdentifier": "t_function_external_view$__$returns$_t_uint80_$_t_int256_$_t_uint256_$_t_uint256_$_t_uint80_$",
@@ -712,10 +712,10 @@
                                                     "name": "IUniswapV3Pool",
                                                     "nodeType": "Identifier",
                                                     "overloadedDeclarations": [],
-                                                    "referencedDeclaration": 3520,
+                                                    "referencedDeclaration": 3518,
                                                     "src": "704:14:2",
                                                     "typeDescriptions": {
-                                                        "typeIdentifier": "t_type$_t_contract$_IUniswapV3Pool_$3520_$",
+                                                        "typeIdentifier": "t_type$_t_contract$_IUniswapV3Pool_$3518_$",
                                                         "typeString": "type(contract IUniswapV3Pool)"
                                                     }
                                                 },
@@ -730,7 +730,7 @@
                                                 "src": "704:24:2",
                                                 "tryCall": false,
                                                 "typeDescriptions": {
-                                                    "typeIdentifier": "t_contract$_IUniswapV3Pool_$3520",
+                                                    "typeIdentifier": "t_contract$_IUniswapV3Pool_$3518",
                                                     "typeString": "contract IUniswapV3Pool"
                                                 }
                                             },
@@ -741,7 +741,7 @@
                                             "lValueRequested": false,
                                             "memberName": "slot0",
                                             "nodeType": "MemberAccess",
-                                            "referencedDeclaration": 3853,
+                                            "referencedDeclaration": 3851,
                                             "src": "704:30:2",
                                             "typeDescriptions": {
                                                 "typeIdentifier": "t_function_external_view$__$returns$_t_uint160_$_t_int24_$_t_uint16_$_t_uint16_$_t_uint16_$_t_uint8_$_t_bool_$",

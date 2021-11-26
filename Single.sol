@@ -51,7 +51,7 @@ contract HedgexSingle is HedgexERC20 {
     //单笔交易开仓数量限制，对冲池净值比例，3%
     uint16 public constant singleOpenLimitRate = 30000;
 
-    //单笔交易平仓数量限制，对冲池净值比例，3%
+    //单笔交易平仓数量限制，对冲池净值比例，10%
     uint24 public constant singleCloseLimitRate = 100000;
 
     //对冲池净头寸比例，在开仓时的限制边界值
@@ -321,9 +321,8 @@ contract HedgexSingle is HedgexERC20 {
             "open long price is too high"
         );
 
-        Trader memory t = traders[msg.sender];
         uint256 money = amount * openPrice;
-        uint256 fee = judegOpen(t, indexPrice, money);
+        (uint256 fee, Trader memory t) = judegOpen(indexPrice, money);
 
         traders[msg.sender].longAmount = t.longAmount + amount;
         traders[msg.sender].longPrice =
@@ -370,8 +369,7 @@ contract HedgexSingle is HedgexERC20 {
         require(openPrice >= priceExp, "open short price is too low");
 
         uint256 money = amount * openPrice;
-        Trader memory t = traders[msg.sender];
-        uint256 fee = judegOpen(t, indexPrice, money);
+        (uint256 fee, Trader memory t) = judegOpen(indexPrice, money);
 
         traders[msg.sender].shortAmount = t.shortAmount + amount;
         traders[msg.sender].shortPrice =
@@ -702,11 +700,11 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //判定用户开仓条件
-    function judegOpen(
-        Trader memory t,
-        uint256 indexPrice,
-        uint256 money
-    ) internal returns (uint256) {
+    function judegOpen(uint256 indexPrice, uint256 money)
+        internal
+        returns (uint256, Trader memory)
+    {
+        Trader memory t = traders[msg.sender];
         //用户净值
         int256 net = t.margin +
             int256(t.longAmount * indexPrice + t.shortAmount * t.shortPrice) -
@@ -726,7 +724,7 @@ contract HedgexSingle is HedgexERC20 {
             rechargeMargin(uint256(needRechargeMargin));
             t = traders[msg.sender];
         }
-        return fee;
+        return (fee, t);
     }
 
     //对冲池结算手续费
