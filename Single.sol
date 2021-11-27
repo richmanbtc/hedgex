@@ -7,6 +7,10 @@ import "./HedgexERC20.sol";
 
 /// @title Single pair hedge pool contract
 contract HedgexSingle is HedgexERC20 {
+    address public feeTo;
+    address public feeToSetter;
+    address internal newFeeToSetter;
+
     uint8 public poolState; //合约状态，1：正常运行，2：pool处于爆仓状态
     uint256 public poolExplosivePrice; //合约爆仓价格，爆仓时锁定此价格
     uint24 public constant poolLeftAmountRate = 50000; //爆仓时，pool净值如果小于此比例，则按照此比例推算爆仓价格
@@ -69,10 +73,10 @@ contract HedgexSingle is HedgexERC20 {
     //手续费费率，真实计算的时候用此值除以divConst
     uint16 public constant feeRate = 600;
 
-    //运营平台对手续费的分成比例，真实计算的时候用此值除以divConst
+    //开发运营团队对手续费的分成比例，真实计算的时候用此值除以divConst
     uint24 public constant feeDivide = 250000;
 
-    //运营平台收取的手续费总量
+    //开发运营团队收取的手续费总量
     uint256 public sumFee;
 
     //每天利息惩罚率，真实计算的时候用此值除以divConst
@@ -174,6 +178,8 @@ contract HedgexSingle is HedgexERC20 {
         isStart = false;
         feeOn = false;
         amountDecimal = _amountDecimal;
+
+        feeToSetter = msg.sender;
     }
 
     function initialize(
@@ -465,7 +471,7 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //爆仓
-    function explosive(address account) public lock {
+    function explosive(address account, address to) public lock {
         require(poolState == 1, "poolState is 2");
         Trader memory t = traders[account];
 
@@ -498,7 +504,8 @@ contract HedgexSingle is HedgexERC20 {
         traders[account].shortPrice = 0;
 
         if (net > 0) {
-            TransferHelper.safeTransfer(token0, msg.sender, uint256(net));
+            TransferHelper.safeTransfer(token0, to, uint256(net / 5));
+            totalPool += (net * 4) / 5;
         } else {
             totalPool += net;
         }
@@ -506,7 +513,7 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //利息收取
-    function detectSlide(address account) public lock {
+    function detectSlide(address account, address to) public lock {
         require(poolState == 1, "poolState is 2");
         uint32 dayCount = uint32(block.timestamp / 86400);
         require(
@@ -546,7 +553,7 @@ contract HedgexSingle is HedgexERC20 {
         t.interestDay = dayCount;
         t.margin -= int256(interest);
         totalPool += int256(interest) - int256(reward);
-        TransferHelper.safeTransfer(token0, msg.sender, reward);
+        TransferHelper.safeTransfer(token0, to, reward);
 
         emit TakeInterest(account, direction, interest, price);
     }
@@ -589,7 +596,7 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //强制按照爆仓价对用户平仓
-    function forceCloseAccount(address account) public lock {
+    function forceCloseAccount(address account, address to) public lock {
         require(poolState == 2, "poolState is not 2");
         Trader memory t = traders[account];
         require(t.longAmount > 0 || t.shortAmount > 0, "");
@@ -630,7 +637,7 @@ contract HedgexSingle is HedgexERC20 {
             token0Decimal) / 100000000000000000000000000;
 
         totalPool -= int256(reward);
-        TransferHelper.safeTransfer(token0, msg.sender, reward);
+        TransferHelper.safeTransfer(token0, to, reward);
 
         emit ForceClose(
             account,
@@ -790,5 +797,38 @@ contract HedgexSingle is HedgexERC20 {
         (, int256 price, , , ) = AggregatorV3Interface(gasUsdPriceFeed)
             .latestRoundData();
         return uint256(price);
+    }
+
+    //提取手续费
+    function withdrawFee() external {
+        require(msg.sender == feeTo, "hedgex:FORBIDDEN");
+        uint256 _sumFee = sumFee;
+        sumFee = 0;
+        TransferHelper.safeTransfer(token0, feeTo, _sumFee); //给用户发送token0代币
+    }
+
+    //设置开发运营团队是否收取手续费
+    function setFeeOn(bool b) external {
+        require(msg.sender == feeToSetter, "hedgex: FORBIDDEN");
+        feeOn = b;
+    }
+
+    //设置手续费发送地址
+    function setFeeTo(address _feeTo) external {
+        require(msg.sender == feeToSetter, "hedgex: FORBIDDEN");
+        feeTo = _feeTo;
+    }
+
+    //转移feeToSetter
+    function transferFeeToSetter(address _feeToSetter) external {
+        require(msg.sender == feeToSetter, "hedgex: FORBIDDEN");
+        newFeeToSetter = _feeToSetter;
+    }
+
+    //接收feeToSetter
+    function acceptFeeToSetter() external {
+        require(msg.sender == newFeeToSetter, "hedgex: FORBIDDEN");
+        feeToSetter = newFeeToSetter;
+        newFeeToSetter = address(0);
     }
 }

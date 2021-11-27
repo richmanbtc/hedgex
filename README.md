@@ -37,3 +37,17 @@ chainlink-rinkeby-bnb/usd : 0xcf0f51ca2cDAecb464eeE4227f5295F2384F84ED
 	}
 }
 ```
+
+
+openLong: 0x6c2ee359
+openShort: 0x71b31707
+closeLong: 0x416c5690
+closeShort: 0xf69d91ae
+addLiquidity: 0xc95f9d0e
+removeLiquidity: 0x05fe138b
+rechargeMargin: 0x11ce83f8
+withdrawMargin: 0x0cea7534
+explosive: 0xfc1e2c45
+explosivePool: 0xc5d24601
+detectSlide: 0x3d07bfb7
+forceCloseAccount: 0xc5d24601
