@@ -518,7 +518,7 @@ contract HedgexSingle is HedgexERC20 {
         uint32 dayCount = uint32(block.timestamp / 86400);
         require(
             block.timestamp - uint256(dayCount * 86400) <= 300,
-            "not the time for take interest"
+            "time disable"
         );
         Trader storage t = traders[account];
         require(dayCount > t.interestDay, "has been take interest");
@@ -573,20 +573,14 @@ contract HedgexSingle is HedgexERC20 {
         //计算爆仓价格
         int256 leftAmount = int256(keepMargin / 4);
         if (poolNet < leftAmount) {
-            require(totalPool > leftAmount, "totalPool must > left");
-            uint256 ePrice = 0; //爆仓价格
-            if (poolLongAmount > poolShortAmount) {
-                ePrice =
-                    poolLongPrice +
-                    uint256(totalPool - leftAmount) /
-                    (poolLongAmount - poolShortAmount);
-            } else if (poolShortAmount > poolLongAmount) {
-                ePrice =
-                    uint256(totalPool - leftAmount) /
-                    (poolShortAmount - poolLongAmount) +
-                    poolShortPrice;
-            }
-            poolExplosivePrice = ePrice;
+            //预估爆仓价计算
+            int256 ePrice = (totalPool -
+                int256(poolLongAmount * poolLongPrice) +
+                int256(poolShortAmount * poolShortPrice) -
+                leftAmount) /
+                (int256(poolShortAmount) - int256(poolLongAmount));
+            require(ePrice > 0, "eprice > 0");
+            poolExplosivePrice = uint256(ePrice);
             totalPool = leftAmount;
         } else {
             totalPool = poolNet;
@@ -599,13 +593,13 @@ contract HedgexSingle is HedgexERC20 {
     function forceCloseAccount(address account, address to) public lock {
         require(poolState == 2, "poolState is not 2");
         Trader memory t = traders[account];
-        require(t.longAmount > 0 || t.shortAmount > 0, "");
-        int256 net = getAccountNet(t, poolExplosivePrice);
+        uint256 _poolExplosivePrice = poolExplosivePrice;
+        int256 net = getAccountNet(t, _poolExplosivePrice);
 
         uint256 fee = ((t.longAmount *
-            poolExplosivePrice +
+            _poolExplosivePrice +
             t.shortAmount *
-            poolExplosivePrice) * feeRate) / divConst;
+            _poolExplosivePrice) * feeRate) / divConst;
 
         //对冲池多空仓减掉相应数量
         if (t.longAmount > 0) {
@@ -643,7 +637,7 @@ contract HedgexSingle is HedgexERC20 {
             account,
             t.longAmount,
             t.shortAmount,
-            poolExplosivePrice
+            _poolExplosivePrice
         );
     }
 
@@ -775,6 +769,19 @@ contract HedgexSingle is HedgexERC20 {
             int256(t.longAmount * t.longPrice + t.shortAmount * price);
     }
 
+    function getPoolPosition()
+        external
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256,
+            uint256
+        )
+    {
+        return (poolLongAmount, poolLongPrice, poolShortAmount, poolShortPrice);
+    }
+
     //获取交易对价格
     //此价格为真实价格乘以交易对定价币的精度，比如wusdt为10的6次方usdt
     //再进行每张合约价格的核算，乘以10^amountDecimal
@@ -804,7 +811,7 @@ contract HedgexSingle is HedgexERC20 {
         require(msg.sender == feeTo, "hedgex:FORBIDDEN");
         uint256 _sumFee = sumFee;
         sumFee = 0;
-        TransferHelper.safeTransfer(token0, feeTo, _sumFee); //给用户发送token0代币
+        TransferHelper.safeTransfer(token0, feeTo, _sumFee);
     }
 
     //设置开发运营团队是否收取手续费
