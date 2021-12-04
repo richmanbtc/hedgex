@@ -195,7 +195,7 @@ contract HedgexSingle is HedgexERC20 {
     //amount, token0的总量
     //to 用户lp token的接收地址，新产生的lp会发送到此地址
     function addLiquidity(uint256 amount, address to) external {
-        require(poolState == 1, "poolState is 2");
+        require(poolState == 1, "state isn't 1");
         //向合约地址发送token0代币，需要提前调用approve授权，要授权给合约地址token0的数量
         TransferHelper.safeTransferFrom(
             token0,
@@ -225,7 +225,7 @@ contract HedgexSingle is HedgexERC20 {
     //liquidity, 发送到合约地址的lp代币数量
     //to, token0代币的接收地址
     function removeLiquidity(uint256 liquidity, address to) external {
-        require(poolState == 1, "poolState is 2");
+        require(poolState == 1, "state isn't 1");
         uint256 amount = liquidity;
         if (isStart) {
             uint256 price = getLatestPrice();
@@ -270,7 +270,7 @@ contract HedgexSingle is HedgexERC20 {
 
     //用户提取保证金
     function withdrawMargin(uint256 amount) external {
-        require(poolState == 1, "poolState is 2");
+        require(poolState == 1, "state isn't 1");
         Trader memory t = traders[msg.sender];
 
         //当前价格
@@ -304,7 +304,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 amount,
         uint256 deadline
     ) public lock ensure(deadline) {
-        require(poolState == 1, "poolState is 2");
+        require(poolState == 1, "state isn't 1");
         require(isStart, "contract is not start");
         uint256 indexPrice = getLatestPrice();
 
@@ -354,7 +354,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 amount,
         uint256 deadline
     ) public lock ensure(deadline) {
-        require(poolState == 1, "poolState is 2");
+        require(poolState == 1, "state isn't 1");
         require(isStart, "contract is not start");
         uint256 indexPrice = getLatestPrice();
 
@@ -398,7 +398,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 amount,
         uint256 deadline
     ) public lock ensure(deadline) {
-        require(poolState == 1, "poolState is 2");
+        require(poolState == 1, "state isn't 1");
         uint256 indexPrice = getLatestPrice();
 
         //判断净头寸是否符合平仓要求
@@ -436,7 +436,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 amount,
         uint256 deadline
     ) public lock ensure(deadline) {
-        require(poolState == 1, "poolState is 2");
+        require(poolState == 1, "state isn't 1");
         uint256 indexPrice = getLatestPrice();
 
         //判断净头寸是否符合平仓要求
@@ -472,7 +472,7 @@ contract HedgexSingle is HedgexERC20 {
 
     //爆仓
     function explosive(address account, address to) public lock {
-        require(poolState == 1, "poolState is 2");
+        require(poolState == 1, "state isn't 1");
         Trader memory t = traders[account];
 
         uint256 keepMargin = (t.longAmount *
@@ -483,12 +483,19 @@ contract HedgexSingle is HedgexERC20 {
         int256 net = getAccountNet(t, price);
         require(net <= int256(keepMargin), "Can not be explosived");
 
+        int256 profit = 0;
         //对冲池多空仓减掉相应数量
         if (t.longAmount > 0) {
             poolShortAmount -= t.longAmount;
+            profit =
+                int256(t.longAmount) *
+                (int256(price) - int256(t.longPrice));
         }
         if (t.shortAmount > 0) {
             poolLongAmount -= t.shortAmount;
+            profit +=
+                int256(t.shortAmount) *
+                (int256(t.shortPrice) - int256(price));
         }
 
         int8 direction = -2;
@@ -505,16 +512,16 @@ contract HedgexSingle is HedgexERC20 {
 
         if (net > 0) {
             TransferHelper.safeTransfer(token0, to, uint256(net / 5));
-            totalPool += (net * 4) / 5;
+            totalPool += (net * 4) / 5 - profit;
         } else {
-            totalPool += net;
+            totalPool += net - profit;
         }
         emit Explosive(account, direction, t.longAmount + t.shortAmount, price);
     }
 
     //利息收取
     function detectSlide(address account, address to) public lock {
-        require(poolState == 1, "poolState is 2");
+        require(poolState == 1, "state isn't 1");
         uint32 dayCount = uint32(block.timestamp / 86400);
         require(
             block.timestamp - uint256(dayCount * 86400) <= 300,
