@@ -51,3 +51,4 @@ explosive: 0xfc1e2c45
 explosivePool: 0xc5d24601
 detectSlide: 0x3d07bfb7
 forceCloseAccount: 0xc5d24601
+0xddf252ad1be

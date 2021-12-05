@@ -176,7 +176,7 @@ contract HedgexSingle is HedgexERC20 {
         minPool = _minStartPool;
         leverage = _leverage;
         isStart = false;
-        feeOn = false;
+        feeOn = true;
         amountDecimal = _amountDecimal;
 
         feeToSetter = msg.sender;
