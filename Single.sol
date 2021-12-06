@@ -780,13 +780,22 @@ contract HedgexSingle is HedgexERC20 {
         external
         view
         returns (
+            int256,
             uint256,
             uint256,
             uint256,
-            uint256
+            uint256,
+            uint8
         )
     {
-        return (poolLongAmount, poolLongPrice, poolShortAmount, poolShortPrice);
+        return (
+            totalPool,
+            poolLongAmount,
+            poolLongPrice,
+            poolShortAmount,
+            poolShortPrice,
+            poolState
+        );
     }
 
     //获取交易对价格
