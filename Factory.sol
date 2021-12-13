@@ -58,14 +58,6 @@ contract HedgexFactory {
         assembly {
             pair := create2(0, add(bytecode, 32), mload(bytecode), salt)
         }
-        HedgexSingle(pair).initialize(
-            token0,
-            priceFeed,
-            feedPriceDecimal,
-            minStartPool,
-            leverage,
-            amountDecimal
-        );
         getPair[token0][priceFeed] = pair;
         getPairName[token0][priceFeed] = name;
         allPairs.push(pair);
