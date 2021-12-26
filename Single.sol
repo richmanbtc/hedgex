@@ -20,10 +20,6 @@ contract HedgexSingle is HedgexERC20 {
     //during pool liquidation, if the pool net value is below this ratio for minPool, then this ratio is used to calculate the liquidation price
     uint24 public constant poolLeftAmountRate = 50000;
 
-    uint256 public constant foceCloseRewardGas = 1000000000;
-    //0.001376BNB 137616 gas
-    //0.000869
-
     uint256 private unlocked = 1;
     modifier lock() {
         require(unlocked == 1, "hedgex locked");
@@ -126,15 +122,14 @@ contract HedgexSingle is HedgexERC20 {
     uint256 public immutable feedPriceDecimal;
 
     //chainlink eth mainnet :
-    //      bnbusd : 0x14e613AC84a31f709eadbdF89C6CC390fDc9540A
-    //      ethusd : 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
+    //      bnb/usd : 0x14e613AC84a31f709eadbdF89C6CC390fDc9540A
+    //      eth/usd : 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
     //chainlink eth rinkeby :
-    //      bnbusd : 0xcf0f51ca2cDAecb464eeE4227f5295F2384F84ED
-    //      ethusd : 0x8A753747A1Fa494EC906cE90E9f37563A8AF630e
+    //      bnb/usd : 0xcf0f51ca2cDAecb464eeE4227f5295F2384F84ED
+    //      eth/usd : 0x8A753747A1Fa494EC906cE90E9f37563A8AF630e
+    //      MATIC/USD : 8 : 0x7794ee502922e2b723432DDD852B3C30A911F021
     //chainlink bsc test :
     //      bnbusd : 0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526
-    address public immutable gasUsdPriceFeed =
-        0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526;
 
     //the contract events
     //add liquidity
@@ -655,9 +650,7 @@ contract HedgexSingle is HedgexERC20 {
         traders[account].shortAmount = 0;
         traders[account].shortPrice = 0;
 
-        uint256 reward = (foceCloseRewardGas *
-            getGasUsdPrice() *
-            token0Decimal) / 100000000000000000000000000;
+        uint256 reward = token0Decimal / 10;
 
         totalPool -= int256(reward);
         TransferHelper.safeTransfer(token0, to, reward);
@@ -832,12 +825,6 @@ contract HedgexSingle is HedgexERC20 {
             (uint256(price) * token0Decimal) /
             10**uint8(-amountDecimal) /
             feedPriceDecimal;
-    }
-
-    function getGasUsdPrice() public view returns (uint256) {
-        (, int256 price, , , ) = AggregatorV3Interface(gasUsdPriceFeed)
-            .latestRoundData();
-        return uint256(price);
     }
 
     //withdraw the fee to dev team
