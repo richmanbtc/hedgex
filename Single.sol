@@ -612,7 +612,7 @@ contract HedgexSingle is HedgexERC20 {
         poolLongPrice = poolShortPrice = 0;
     }
 
-    //force close user's position with poolExplosivePrice when the pooState is 2
+    //force close user's position with poolExplosivePrice when the poolState is 2
     function forceCloseAccount(address account, address to) public lock {
         require(poolState == 2, "poolState is not 2");
         Trader memory t = traders[account];
