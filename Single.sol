@@ -67,10 +67,10 @@ contract HedgexSingle is HedgexERC20 {
     uint24 public constant singleCloseLimitRate = 100000;
 
     //net position rate of the pool, the limit boundary value when open a position
-    int24 public constant poolNetAmountRateLimitOpen = 300000;
+    int24 public constant poolNetAmountRateLimitOpen = 400000;
 
     //net position rate of the pool, the price shift boundary when open or close a position
-    int24 public constant poolNetAmountRateLimitPrice = 200000;
+    int24 public constant poolNetAmountRateLimitPrice = 300000;
 
     //price shift value, it is a fixed ratio, + when buy and - when sell, 0.005%
     uint8 public constant slideP = 50;
@@ -572,7 +572,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 reward = (interest * interestRewardRate) / divConst;
         t.interestDay = dayCount;
         t.margin -= int256(interest);
-        totalPool += int256(interest) - int256(reward);
+        feeCharge(interest - reward);
         TransferHelper.safeTransfer(token0, to, reward);
 
         emit TakeInterest(account, direction, interest, price);
