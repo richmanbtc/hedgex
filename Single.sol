@@ -421,7 +421,7 @@ contract HedgexSingle is HedgexERC20 {
         );
 
         uint256 closePrice = indexPrice - slideTradePrice(indexPrice, R);
-        require(closePrice >= priceExp, "close long price is lower");
+        require(closePrice >= priceExp, "close long price is too low");
 
         Trader memory t = traders[msg.sender];
         require(t.longAmount >= amount, "close amount require >= longAmount");
@@ -459,7 +459,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 closePrice = indexPrice + slideTradePrice(indexPrice, R);
         require(
             closePrice <= priceExp || priceExp == 0,
-            "close short price is higher"
+            "close short price is too high"
         );
 
         Trader memory t = traders[msg.sender];
