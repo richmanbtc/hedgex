@@ -1,6 +1,6 @@
 //SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.7;
-import "./interfaces/AggregatorV3Interface.sol";
+import "./interfaces/IIndexPrice.sol";
 import "./interfaces/IERC20.sol";
 import "./libraries/TransferHelper.sol";
 import "./HedgexERC20.sol";
@@ -8,8 +8,11 @@ import "./HedgexERC20.sol";
 /// @title Single pair hedge pool contract
 contract HedgexSingle is HedgexERC20 {
     address public feeTo;
-    address public feeToSetter;
-    address internal newFeeToSetter;
+    address public contractSetter;
+    address internal newContractSetter;
+
+    bool public bAddLiquidity = true;
+    bool public bOpen = true;
 
     //smart contract status, 1：normal，2：pool is being liquidated
     uint8 public poolState;
@@ -67,19 +70,22 @@ contract HedgexSingle is HedgexERC20 {
     uint24 public constant singleCloseLimitRate = 100000;
 
     //net position rate of the pool, the limit boundary value when open a position
-    int24 public constant poolNetAmountRateLimitOpen = 400000;
+    int24 public poolNetAmountRateLimitOpen = 400000;
 
     //net position rate of the pool, the price shift boundary when open or close a position
-    int24 public constant poolNetAmountRateLimitPrice = 300000;
+    int24 public poolNetAmountRateLimitPrice = 300000;
 
     //price shift value, it is a fixed ratio, + when buy and - when sell, 0.005%
     uint8 public constant slideP = 50;
+
+    //keep margin scale to explosive
+    uint8 public keepMarginScale = 30;
 
     //if trading fee is reward to dev team
     bool public feeOn;
 
     //trading fee rate, 0.06%
-    uint16 public constant feeRate = 600;
+    uint16 public feeRate = 600;
 
     //the fee ratio for the dev team, 25%
     uint24 public constant feeDivide = 250000;
@@ -116,10 +122,7 @@ contract HedgexSingle is HedgexERC20 {
     mapping(address => Trader) public traders;
 
     //contract address which provide the index price feed oracle, it is show on chainlink
-    AggregatorV3Interface public immutable feedPrice;
-
-    //the decimal of the index price, for example 100000000 for all the usdx
-    uint256 public immutable feedPriceDecimal;
+    IIndexPrice public feedPrice;
 
     //chainlink eth mainnet :
     //      bnb/usd : 0x14e613AC84a31f709eadbdF89C6CC390fDc9540A
@@ -186,23 +189,21 @@ contract HedgexSingle is HedgexERC20 {
     constructor(
         address _token0,
         address _feedPrice,
-        uint256 _feedPriceDecimal,
         uint256 _minStartPool,
         uint8 _leverage,
         int8 _amountDecimal
     ) HedgexERC20(IERC20(_token0).decimals()) {
         poolState = 1;
-        feedPrice = AggregatorV3Interface(_feedPrice);
+        feedPrice = IIndexPrice(_feedPrice);
         token0 = _token0;
         token0Decimal = 10**(IERC20(_token0).decimals());
-        feedPriceDecimal = _feedPriceDecimal;
         minPool = _minStartPool;
         leverage = _leverage;
         isStart = false;
         feeOn = true;
         amountDecimal = _amountDecimal;
 
-        feeToSetter = msg.sender;
+        contractSetter = msg.sender;
     }
 
     //add token0 liquidity to the pool
@@ -210,6 +211,7 @@ contract HedgexSingle is HedgexERC20 {
     //to, the user's address, lp token which the contract create will send to this address
     function addLiquidity(uint256 amount, address to) external {
         require(poolState == 1, "state isn't 1");
+        require(bAddLiquidity, "forbidden");
         //send token0 to this contract for amount. user must approve to the contract address before.
         TransferHelper.safeTransferFrom(
             token0,
@@ -320,6 +322,7 @@ contract HedgexSingle is HedgexERC20 {
     ) public lock ensure(deadline) {
         require(poolState == 1, "state isn't 1");
         require(isStart, "contract is not start");
+        require(bOpen, "forbidden");
         uint256 indexPrice = getLatestPrice();
 
         //get pool's net and abs(long-short) / net as R
@@ -331,7 +334,7 @@ contract HedgexSingle is HedgexERC20 {
         );
         require(
             R < poolNetAmountRateLimitOpen,
-            "pool net amount must small than 30%"
+            "pool net amount must small than param"
         );
 
         //open price add the slide price
@@ -369,6 +372,7 @@ contract HedgexSingle is HedgexERC20 {
     ) public lock ensure(deadline) {
         require(poolState == 1, "state isn't 1");
         require(isStart, "contract is not start");
+        require(bOpen, "forbidden");
         uint256 indexPrice = getLatestPrice();
 
         //get pool's net and abs(long-short) / net as R
@@ -380,7 +384,7 @@ contract HedgexSingle is HedgexERC20 {
         );
         require(
             R < poolNetAmountRateLimitOpen,
-            "pool net amount must small than 30%"
+            "pool net amount must small than param"
         );
 
         //open price sub the slide price
@@ -488,7 +492,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 keepMargin = (t.longAmount *
             t.longPrice +
             t.shortAmount *
-            t.shortPrice) / 30;
+            t.shortPrice) / keepMarginScale;
         uint256 price = getLatestPrice();
         int256 net = getAccountNet(t, price);
         require(net <= int256(keepMargin), "cann't explosive");
@@ -703,7 +707,7 @@ contract HedgexSingle is HedgexERC20 {
     //caculate the slide price of trade
     function slideTradePrice(uint256 inP, int256 R)
         internal
-        pure
+        view
         returns (uint256)
     {
         uint256 slideRate = 0;
@@ -814,7 +818,7 @@ contract HedgexSingle is HedgexERC20 {
 
     //get the index price, the token0's amount for per position
     function getLatestPrice() public view returns (uint256) {
-        (, int256 price, , , ) = feedPrice.latestRoundData();
+        (uint256 price, uint256 feedPriceDecimal, ) = feedPrice.indexPrice();
         require(price > 0, "the pair standard price must be positive");
         if (amountDecimal >= 0) {
             return
@@ -827,6 +831,37 @@ contract HedgexSingle is HedgexERC20 {
             feedPriceDecimal;
     }
 
+    //set the address for the index price to get
+    function setFeedPrice(address _feedPrice) external {
+        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
+        feedPrice = IIndexPrice(_feedPrice);
+    }
+
+    function setPoolNetAmountRateLimitOpen(int24 value) external {
+        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
+        poolNetAmountRateLimitOpen = value;
+    }
+
+    function setPoolNetAmountRateLimitPrice(int24 value) external {
+        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
+        poolNetAmountRateLimitPrice = value;
+    }
+
+    function setKeepMarginScale(uint8 value) external {
+        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
+        keepMarginScale = value;
+    }
+
+    function setBAddLiquidity(bool b) external {
+        require(msg.sender == contractSetter);
+        bAddLiquidity = b;
+    }
+
+    function setBOpen(bool b) external {
+        require(msg.sender == contractSetter);
+        bOpen = b;
+    }
+
     //withdraw the fee to dev team
     function withdrawFee() external {
         require(msg.sender == feeTo, "hedgex:FORBIDDEN");
@@ -837,26 +872,31 @@ contract HedgexSingle is HedgexERC20 {
 
     //set the fee on or off
     function setFeeOn(bool b) external {
-        require(msg.sender == feeToSetter, "hedgex: FORBIDDEN");
+        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
         feeOn = b;
+    }
+
+    function setFeeRate(uint16 value) external {
+        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
+        feeRate = value;
     }
 
     //set the address that the fee send to
     function setFeeTo(address _feeTo) external {
-        require(msg.sender == feeToSetter, "hedgex: FORBIDDEN");
+        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
         feeTo = _feeTo;
     }
 
-    //transfer the feeToSetter
-    function transferFeeToSetter(address _feeToSetter) external {
-        require(msg.sender == feeToSetter, "hedgex: FORBIDDEN");
-        newFeeToSetter = _feeToSetter;
+    //transfer the contractSetter
+    function transferContractSetter(address _contractSetter) external {
+        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
+        newContractSetter = _contractSetter;
     }
 
-    //accept the feeToSetter
-    function acceptFeeToSetter() external {
-        require(msg.sender == newFeeToSetter, "hedgex: FORBIDDEN");
-        feeToSetter = newFeeToSetter;
-        newFeeToSetter = address(0);
+    //accept the contractSetter
+    function acceptContractSetter() external {
+        require(msg.sender == newContractSetter, "hedgex: FORBIDDEN");
+        contractSetter = newContractSetter;
+        newContractSetter = address(0);
     }
 }
