@@ -8,7 +8,7 @@ contract LinkIndexPrice is IIndexPrice {
     AggregatorV3Interface public immutable feedPrice;
 
     //the decimal of the index price, for example 100000000 for all the usdx
-    uint256 public immutable decimals;
+    uint256 public immutable override decimals;
 
     constructor(address _feedPrice, uint256 _feedPriceDecimal) {
         feedPrice = AggregatorV3Interface(_feedPrice);
@@ -18,6 +18,7 @@ contract LinkIndexPrice is IIndexPrice {
     function indexPrice()
         external
         view
+        override
         returns (
             uint256,
             uint256,
