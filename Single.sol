@@ -11,8 +11,8 @@ contract HedgexSingle is HedgexERC20 {
     address public contractSetter;
     address internal newContractSetter;
 
-    bool public bAddLiquidity = true;
-    bool public bOpen = true;
+    bool public canAddLiquidity = true;
+    bool public canOpen = true;
 
     //smart contract status, 1：normal，2：pool is being liquidated
     uint8 public poolState;
@@ -211,7 +211,7 @@ contract HedgexSingle is HedgexERC20 {
     //to, the user's address, lp token which the contract create will send to this address
     function addLiquidity(uint256 amount, address to) external {
         require(poolState == 1, "state isn't 1");
-        require(bAddLiquidity, "forbidden");
+        require(canAddLiquidity, "forbidden");
         //send token0 to this contract for amount. user must approve to the contract address before.
         TransferHelper.safeTransferFrom(
             token0,
@@ -322,7 +322,7 @@ contract HedgexSingle is HedgexERC20 {
     ) public lock ensure(deadline) {
         require(poolState == 1, "state isn't 1");
         require(isStart, "contract is not start");
-        require(bOpen, "forbidden");
+        require(canOpen, "forbidden");
         uint256 indexPrice = getLatestPrice();
 
         //get pool's net and abs(long-short) / net as R
@@ -372,7 +372,7 @@ contract HedgexSingle is HedgexERC20 {
     ) public lock ensure(deadline) {
         require(poolState == 1, "state isn't 1");
         require(isStart, "contract is not start");
-        require(bOpen, "forbidden");
+        require(canOpen, "forbidden");
         uint256 indexPrice = getLatestPrice();
 
         //get pool's net and abs(long-short) / net as R
@@ -852,14 +852,14 @@ contract HedgexSingle is HedgexERC20 {
         keepMarginScale = value;
     }
 
-    function setBAddLiquidity(bool b) external {
+    function setCanAddLiquidity(bool b) external {
         require(msg.sender == contractSetter);
-        bAddLiquidity = b;
+        canAddLiquidity = b;
     }
 
-    function setBOpen(bool b) external {
+    function setCanOpen(bool b) external {
         require(msg.sender == contractSetter);
-        bOpen = b;
+        canOpen = b;
     }
 
     //withdraw the fee to dev team
