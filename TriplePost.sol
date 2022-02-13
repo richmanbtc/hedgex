@@ -15,7 +15,7 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
         decimals = _priceDecimal;
     }
 
-    function postPrice(bytes32 _symbol, uint256 value) public {
+    function postPrice(bytes32 _symbol, uint256 value) external {
         require(msg.sender == owner);
         require(symbol == _symbol);
         require(value > 0);
