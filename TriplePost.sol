@@ -10,12 +10,22 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
     bytes32 public symbol;
     uint256 price;
 
+    modifier ensure(uint256 deadline) {
+        require(deadline >= block.timestamp, "Hedgex Trade: EXPIRED");
+        _;
+    }
+
     constructor(string memory _symbol, uint256 _priceDecimal) {
         symbol = keccak256(abi.encodePacked(_symbol));
         decimals = _priceDecimal;
+        owner = msg.sender;
     }
 
-    function postPrice(bytes32 _symbol, uint256 value) external {
+    function postPrice(
+        bytes32 _symbol,
+        uint256 value,
+        uint256 deadline
+    ) external ensure(deadline) {
         require(msg.sender == owner);
         require(symbol == _symbol);
         require(value > 0);
