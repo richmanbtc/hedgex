@@ -4,12 +4,11 @@ import "./interfaces/IIndexPrice.sol";
 import "./interfaces/IERC20.sol";
 import "./libraries/TransferHelper.sol";
 import "./HedgexERC20.sol";
+import "./Ownable.sol";
 
 /// @title Single pair hedge pool contract
-contract HedgexSingle is HedgexERC20 {
+contract HedgexSingle is HedgexERC20, Ownable {
     address public feeTo;
-    address public contractSetter;
-    address internal newContractSetter;
 
     bool public canAddLiquidity = true;
     bool public canOpen = true;
@@ -203,7 +202,7 @@ contract HedgexSingle is HedgexERC20 {
         feeOn = true;
         amountDecimal = _amountDecimal;
 
-        contractSetter = msg.sender;
+        owner = msg.sender;
     }
 
     //add token0 liquidity to the pool
@@ -319,7 +318,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 priceExp,
         uint256 amount,
         uint256 deadline
-    ) public lock ensure(deadline) {
+    ) external lock ensure(deadline) {
         require(poolState == 1, "state isn't 1");
         require(isStart, "contract is not start");
         require(canOpen, "forbidden");
@@ -369,7 +368,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 priceExp,
         uint256 amount,
         uint256 deadline
-    ) public lock ensure(deadline) {
+    ) external lock ensure(deadline) {
         require(poolState == 1, "state isn't 1");
         require(isStart, "contract is not start");
         require(canOpen, "forbidden");
@@ -413,7 +412,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 priceExp,
         uint256 amount,
         uint256 deadline
-    ) public lock ensure(deadline) {
+    ) external lock ensure(deadline) {
         require(poolState == 1, "state isn't 1");
         uint256 indexPrice = getLatestPrice();
 
@@ -449,7 +448,7 @@ contract HedgexSingle is HedgexERC20 {
         uint256 priceExp,
         uint256 amount,
         uint256 deadline
-    ) public lock ensure(deadline) {
+    ) external lock ensure(deadline) {
         require(poolState == 1, "state isn't 1");
         uint256 indexPrice = getLatestPrice();
 
@@ -484,7 +483,7 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //explosive the user
-    function explosive(address account, address to) public lock {
+    function explosive(address account, address to) external lock {
         require(poolState == 1, "state isn't 1");
         Trader memory t = traders[account];
 
@@ -535,7 +534,7 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //take interest when trader has different position direction with pool
-    function detectSlide(address account, address to) public lock {
+    function detectSlide(address account, address to) external lock {
         require(poolState == 1, "state isn't 1");
         uint32 dayCount = uint32(block.timestamp / 86400);
         require( //must 00:00~00:05 everyday
@@ -583,7 +582,7 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //explosive pool, there is no reward
-    function explosivePool() public lock {
+    function explosivePool() external lock {
         require(poolState == 1, "pool is explosiving");
         uint256 indexPrice = getLatestPrice();
         int256 poolNet = getPoolNet(indexPrice);
@@ -617,7 +616,7 @@ contract HedgexSingle is HedgexERC20 {
     }
 
     //force close user's position with poolExplosivePrice when the poolState is 2
-    function forceCloseAccount(address account, address to) public lock {
+    function forceCloseAccount(address account, address to) external lock {
         require(poolState == 2, "poolState is not 2");
         Trader memory t = traders[account];
         uint256 _poolExplosivePrice = poolExplosivePrice;
@@ -833,38 +832,38 @@ contract HedgexSingle is HedgexERC20 {
 
     //set the address for the index price to get
     function setFeedPrice(address _feedPrice) external {
-        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
+        require(msg.sender == owner, "forbidden");
         feedPrice = IIndexPrice(_feedPrice);
     }
 
     function setPoolNetAmountRateLimitOpen(int24 value) external {
-        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
+        require(msg.sender == owner, "forbidden");
         poolNetAmountRateLimitOpen = value;
     }
 
     function setPoolNetAmountRateLimitPrice(int24 value) external {
-        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
+        require(msg.sender == owner, "forbidden");
         poolNetAmountRateLimitPrice = value;
     }
 
     function setKeepMarginScale(uint8 value) external {
-        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
+        require(msg.sender == owner, "forbidden");
         keepMarginScale = value;
     }
 
     function setCanAddLiquidity(bool b) external {
-        require(msg.sender == contractSetter);
+        require(msg.sender == owner, "forbidden");
         canAddLiquidity = b;
     }
 
     function setCanOpen(bool b) external {
-        require(msg.sender == contractSetter);
+        require(msg.sender == owner, "forbidden");
         canOpen = b;
     }
 
     //withdraw the fee to dev team
     function withdrawFee() external {
-        require(msg.sender == feeTo, "hedgex:FORBIDDEN");
+        require(msg.sender == feeTo, "forbidden");
         uint256 _sumFee = sumFee;
         sumFee = 0;
         TransferHelper.safeTransfer(token0, feeTo, _sumFee);
@@ -872,31 +871,18 @@ contract HedgexSingle is HedgexERC20 {
 
     //set the fee on or off
     function setFeeOn(bool b) external {
-        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
+        require(msg.sender == owner, "forbidden");
         feeOn = b;
     }
 
     function setFeeRate(uint16 value) external {
-        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
+        require(msg.sender == owner, "frobidden");
         feeRate = value;
     }
 
     //set the address that the fee send to
     function setFeeTo(address _feeTo) external {
-        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
+        require(msg.sender == owner, "forbidden");
         feeTo = _feeTo;
-    }
-
-    //transfer the contractSetter
-    function transferContractSetter(address _contractSetter) external {
-        require(msg.sender == contractSetter, "hedgex: FORBIDDEN");
-        newContractSetter = _contractSetter;
-    }
-
-    //accept the contractSetter
-    function acceptContractSetter() external {
-        require(msg.sender == newContractSetter, "hedgex: FORBIDDEN");
-        contractSetter = newContractSetter;
-        newContractSetter = address(0);
     }
 }
