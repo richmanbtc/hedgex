@@ -11,7 +11,7 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
     uint256 price;
 
     modifier ensure(uint256 deadline) {
-        require(deadline >= block.timestamp, "Hedgex Trade: EXPIRED");
+        require(deadline >= block.timestamp, "EXPIRED");
         _;
     }
 
