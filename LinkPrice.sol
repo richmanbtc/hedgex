@@ -22,13 +22,13 @@ contract LinkIndexPrice is IIndexPrice {
         returns (
             uint256,
             uint256,
-            uint256
+            int256
         )
     {
         (, int256 price, , , ) = feedPrice.latestRoundData();
         if (price <= 0) {
             price = 0;
         }
-        return (uint256(price), decimals, block.timestamp);
+        return (uint256(price), decimals, 0);
     }
 }
