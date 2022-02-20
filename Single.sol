@@ -24,7 +24,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
 
     uint256 private unlocked = 1;
     modifier lock() {
-        require(unlocked == 1, "hedgex locked");
+        require(unlocked == 1, "locked");
         unlocked = 0;
         _;
         unlocked = 1;
@@ -74,6 +74,16 @@ contract HedgexSingle is HedgexERC20, Ownable {
     //net position rate of the pool, the price shift boundary when open or close a position
     int24 public poolNetAmountRateLimitPrice = 300000;
 
+    struct NetPositionRate {
+        int256 initR;
+        uint256 number;
+        int256 deltaR;
+    }
+    NetPositionRate public R0;
+    NetPositionRate public R1;
+    NetPositionRate public R2;
+    NetPositionRate public R3;
+
     //price shift value, it is a fixed ratio, + when buy and - when sell, 0.005%
     uint8 public constant slideP = 50;
 
@@ -122,16 +132,6 @@ contract HedgexSingle is HedgexERC20, Ownable {
 
     //contract address which provide the index price feed oracle, it is show on chainlink
     IIndexPrice public feedPrice;
-
-    //chainlink eth mainnet :
-    //      bnb/usd : 0x14e613AC84a31f709eadbdF89C6CC390fDc9540A
-    //      eth/usd : 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
-    //chainlink eth rinkeby :
-    //      bnb/usd : 0xcf0f51ca2cDAecb464eeE4227f5295F2384F84ED
-    //      eth/usd : 0x8A753747A1Fa494EC906cE90E9f37563A8AF630e
-    //      MATIC/USD : 8 : 0x7794ee502922e2b723432DDD852B3C30A911F021
-    //chainlink bsc test :
-    //      bnbusd : 0x2514895c72f50D8bd4B4F9b1110F0D6bD2c97526
 
     //the contract events
     //add liquidity
@@ -245,7 +245,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
         require(poolState == 1, "state isn't 1");
         uint256 amount = liquidity;
         if (isStart) {
-            uint256 price = getLatestPrice();
+            (uint256 price, ) = getLatestPrice();
             int256 net = getPoolNet(price);
             //the net position amount, it is positive
             uint256 netAmount = poolLongAmount > poolShortAmount
@@ -289,7 +289,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
         Trader memory t = traders[msg.sender];
 
         //the current index price
-        uint256 price = getLatestPrice();
+        (uint256 price, ) = getLatestPrice();
 
         //the current used margin
         uint256 usedMargin = (t.longAmount *
@@ -322,7 +322,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
         require(poolState == 1, "state isn't 1");
         require(isStart, "contract is not start");
         require(canOpen, "forbidden");
-        uint256 indexPrice = getLatestPrice();
+        (uint256 indexPrice, int256 deltaPrice) = getLatestPrice();
 
         //get pool's net and abs(long-short) / net as R
         (int256 R, int256 net) = poolLimitTrade(1, indexPrice);
@@ -338,6 +338,9 @@ contract HedgexSingle is HedgexERC20, Ownable {
 
         //open price add the slide price
         uint256 openPrice = indexPrice + slideTradePrice(indexPrice, R);
+        if (deltaPrice < 0) {
+            openPrice += uint256(-deltaPrice);
+        }
         require(
             openPrice <= priceExp || priceExp == 0,
             "open long price is too high"
@@ -372,7 +375,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
         require(poolState == 1, "state isn't 1");
         require(isStart, "contract is not start");
         require(canOpen, "forbidden");
-        uint256 indexPrice = getLatestPrice();
+        (uint256 indexPrice, int256 deltaPrice) = getLatestPrice();
 
         //get pool's net and abs(long-short) / net as R
         (int256 R, int256 net) = poolLimitTrade(-1, indexPrice);
@@ -388,6 +391,9 @@ contract HedgexSingle is HedgexERC20, Ownable {
 
         //open price sub the slide price
         uint256 openPrice = indexPrice - slideTradePrice(indexPrice, R);
+        if (deltaPrice > 0) {
+            openPrice -= uint256(deltaPrice);
+        }
         require(openPrice >= priceExp, "open short price is too low");
 
         uint256 money = amount * openPrice;
@@ -414,7 +420,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
         uint256 deadline
     ) external lock ensure(deadline) {
         require(poolState == 1, "state isn't 1");
-        uint256 indexPrice = getLatestPrice();
+        (uint256 indexPrice, int256 deltaPrice) = getLatestPrice();
 
         (int256 R, int256 net) = poolLimitTrade(-1, indexPrice);
         require(
@@ -424,6 +430,9 @@ contract HedgexSingle is HedgexERC20, Ownable {
         );
 
         uint256 closePrice = indexPrice - slideTradePrice(indexPrice, R);
+        if (deltaPrice > 0) {
+            closePrice -= uint256(deltaPrice);
+        }
         require(closePrice >= priceExp, "close long price is too low");
 
         Trader memory t = traders[msg.sender];
@@ -450,7 +459,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
         uint256 deadline
     ) external lock ensure(deadline) {
         require(poolState == 1, "state isn't 1");
-        uint256 indexPrice = getLatestPrice();
+        (uint256 indexPrice, int256 deltaPrice) = getLatestPrice();
 
         (int256 R, int256 net) = poolLimitTrade(1, indexPrice);
         require(
@@ -460,6 +469,9 @@ contract HedgexSingle is HedgexERC20, Ownable {
         );
 
         uint256 closePrice = indexPrice + slideTradePrice(indexPrice, R);
+        if (deltaPrice < 0) {
+            closePrice += uint256(-deltaPrice);
+        }
         require(
             closePrice <= priceExp || priceExp == 0,
             "close short price is too high"
@@ -492,7 +504,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
             t.longPrice +
             t.shortAmount *
             t.shortPrice) / keepMarginScale;
-        uint256 price = getLatestPrice();
+        (uint256 price, ) = getLatestPrice();
         int256 net = getAccountNet(t, price);
         require(net <= int256(keepMargin), "cann't explosive");
 
@@ -552,7 +564,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
         uint256 price = 0;
         if (t.longAmount > t.shortAmount) {
             require(_shortPosition > _longPosition, "have no interest");
-            price = getLatestPrice();
+            (price, ) = getLatestPrice();
             interest =
                 (price *
                     t.longAmount *
@@ -562,7 +574,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
                 _shortPosition;
         } else {
             require(_longPosition > _shortPosition, "have no interest");
-            price = getLatestPrice();
+            (price, ) = getLatestPrice();
             direction = -1;
             interest =
                 (price *
@@ -584,7 +596,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
     //explosive pool, there is no reward
     function explosivePool() external lock {
         require(poolState == 1, "pool is explosiving");
-        uint256 indexPrice = getLatestPrice();
+        (uint256 indexPrice, ) = getLatestPrice();
         int256 poolNet = getPoolNet(indexPrice);
         //caculate the keep margin of pool
         uint256 keepMargin = poolLongAmount > poolShortAmount
@@ -668,7 +680,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
 
     //get current net of pool, require net > 0
     function getPoolNet() public view returns (int256) {
-        uint256 price = getLatestPrice();
+        (uint256 price, ) = getLatestPrice();
         int256 net = totalPool +
             int256(poolLongAmount * price + poolShortAmount * poolShortPrice) -
             int256(poolLongAmount * poolLongPrice + poolShortAmount * price);
@@ -683,6 +695,36 @@ contract HedgexSingle is HedgexERC20, Ownable {
             int256(poolLongAmount * poolLongPrice + poolShortAmount * price);
         require(net > 0, "net<=0");
         return net;
+    }
+
+    function getDeltaPriceByR(int256 R) internal returns (int256) {
+        if (block.number != R0.number) {
+            //move R0->R1,R1->R2,R2->R3
+            R3 = R2;
+            R2 = R1;
+            R1 = R0;
+            R0.number = block.number;
+            R0.initR = R;
+            R0.deltaR = 0;
+            if (R1.number != (block.number - 1)) {
+                R3 = R2;
+                R2 = R1;
+                R1 = R0;
+                R1.number = block.number - 1;
+            }
+            if (R2.number != (block.number - 2)) {
+                R3 = R2;
+                R2 = R1;
+                R2.number = block.number - 2;
+            }
+            if (R3.number != (block.number - 3)) {
+                R3 = R2;
+                R3.number = block.number - 3;
+            }
+        } else {
+            R0.deltaR = R - R0.initR;
+        }
+        return 0;
     }
 
     //return the net position ratio of the liquidity pool and net of pool
@@ -775,7 +817,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
     }
 
     function getAccountNet(Trader memory t) internal view returns (int256) {
-        uint256 price = getLatestPrice();
+        (uint256 price, ) = getLatestPrice();
         return
             t.margin +
             int256(t.longAmount * price + t.shortAmount * t.shortPrice) -
@@ -816,18 +858,26 @@ contract HedgexSingle is HedgexERC20, Ownable {
     }
 
     //get the index price, the token0's amount for per position
-    function getLatestPrice() public view returns (uint256) {
-        (uint256 price, uint256 feedPriceDecimal, ) = feedPrice.indexPrice();
+    function getLatestPrice() public view returns (uint256, int256) {
+        (uint256 price, uint256 feedPriceDecimal, int256 priceSlide) = feedPrice
+            .indexPrice();
         require(price > 0, "the pair standard price must be positive");
         if (amountDecimal >= 0) {
-            return
-                (uint256(price) * token0Decimal * 10**uint8(amountDecimal)) /
-                feedPriceDecimal;
+            return (
+                (price * token0Decimal * 10**uint8(amountDecimal)) /
+                    feedPriceDecimal,
+                (priceSlide *
+                    int256(token0Decimal * 10**uint8(amountDecimal))) /
+                    int256(feedPriceDecimal)
+            );
         }
-        return
-            (uint256(price) * token0Decimal) /
-            10**uint8(-amountDecimal) /
-            feedPriceDecimal;
+        return (
+            (price * token0Decimal) /
+                10**uint8(-amountDecimal) /
+                feedPriceDecimal,
+            (priceSlide * int256(token0Decimal * 10**uint8(-amountDecimal))) /
+                int256(feedPriceDecimal)
+        );
     }
 
     //set the address for the index price to get

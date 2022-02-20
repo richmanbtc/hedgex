@@ -8,7 +8,7 @@ interface IIndexPrice {
         returns (
             uint256 price,
             uint256 decimal,
-            uint256 updateAt
+            int256 slidePrice
         );
 
     function decimals() external returns (uint256);
