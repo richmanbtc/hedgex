@@ -77,12 +77,14 @@ contract HedgexSingle is HedgexERC20, Ownable {
     struct NetPositionRate {
         int256 initR;
         uint256 number;
-        int256 deltaR;
+        int8 deltaR;
     }
     NetPositionRate public R0;
     NetPositionRate public R1;
     NetPositionRate public R2;
-    NetPositionRate public R3;
+    int24 public deltaR0Limit = 50000;
+    int24 public deltaR2Limit = 100000;
+    uint24 public deltaRSlidePriceRate = 10000;
 
     //price shift value, it is a fixed ratio, + when buy and - when sell, 0.005%
     uint8 public constant slideP = 50;
@@ -325,7 +327,10 @@ contract HedgexSingle is HedgexERC20, Ownable {
         (uint256 indexPrice, int256 deltaPrice) = getLatestPrice();
 
         //get pool's net and abs(long-short) / net as R
-        (int256 R, int256 net) = poolLimitTrade(1, indexPrice);
+        (int256 R, int256 net, uint256 offsetRPrice) = poolLimitTrade(
+            1,
+            indexPrice
+        );
         require(
             amount <=
                 ((uint256(net) * singleOpenLimitRate) / divConst) / indexPrice,
@@ -337,7 +342,9 @@ contract HedgexSingle is HedgexERC20, Ownable {
         );
 
         //open price add the slide price
-        uint256 openPrice = indexPrice + slideTradePrice(indexPrice, R);
+        uint256 openPrice = indexPrice +
+            offsetRPrice +
+            slideTradePrice(indexPrice, R);
         if (deltaPrice < 0) {
             openPrice += uint256(-deltaPrice);
         }
@@ -378,7 +385,10 @@ contract HedgexSingle is HedgexERC20, Ownable {
         (uint256 indexPrice, int256 deltaPrice) = getLatestPrice();
 
         //get pool's net and abs(long-short) / net as R
-        (int256 R, int256 net) = poolLimitTrade(-1, indexPrice);
+        (int256 R, int256 net, uint256 offsetRPrice) = poolLimitTrade(
+            -1,
+            indexPrice
+        );
         require(
             amount <=
                 ((uint256(net) * singleOpenLimitRate) / divConst) / indexPrice,
@@ -390,7 +400,9 @@ contract HedgexSingle is HedgexERC20, Ownable {
         );
 
         //open price sub the slide price
-        uint256 openPrice = indexPrice - slideTradePrice(indexPrice, R);
+        uint256 openPrice = indexPrice -
+            offsetRPrice -
+            slideTradePrice(indexPrice, R);
         if (deltaPrice > 0) {
             openPrice -= uint256(deltaPrice);
         }
@@ -422,14 +434,19 @@ contract HedgexSingle is HedgexERC20, Ownable {
         require(poolState == 1, "state isn't 1");
         (uint256 indexPrice, int256 deltaPrice) = getLatestPrice();
 
-        (int256 R, int256 net) = poolLimitTrade(-1, indexPrice);
+        (int256 R, int256 net, uint256 offsetRPrice) = poolLimitTrade(
+            -1,
+            indexPrice
+        );
         require(
             amount <=
                 ((uint256(net) * singleCloseLimitRate) / divConst) / indexPrice,
             "single amount over net * rate"
         );
 
-        uint256 closePrice = indexPrice - slideTradePrice(indexPrice, R);
+        uint256 closePrice = indexPrice -
+            offsetRPrice -
+            slideTradePrice(indexPrice, R);
         if (deltaPrice > 0) {
             closePrice -= uint256(deltaPrice);
         }
@@ -461,14 +478,19 @@ contract HedgexSingle is HedgexERC20, Ownable {
         require(poolState == 1, "state isn't 1");
         (uint256 indexPrice, int256 deltaPrice) = getLatestPrice();
 
-        (int256 R, int256 net) = poolLimitTrade(1, indexPrice);
+        (int256 R, int256 net, uint256 offsetRPrice) = poolLimitTrade(
+            1,
+            indexPrice
+        );
         require(
             amount <=
                 ((uint256(net) * singleCloseLimitRate) / divConst) / indexPrice,
             "single amount over net * rate"
         );
 
-        uint256 closePrice = indexPrice + slideTradePrice(indexPrice, R);
+        uint256 closePrice = indexPrice +
+            offsetRPrice +
+            slideTradePrice(indexPrice, R);
         if (deltaPrice < 0) {
             closePrice += uint256(-deltaPrice);
         }
@@ -697,34 +719,34 @@ contract HedgexSingle is HedgexERC20, Ownable {
         return net;
     }
 
-    function getDeltaPriceByR(int256 R) internal returns (int256) {
+    function getDeltaPriceByR(int256 R) internal returns (int8) {
         if (block.number != R0.number) {
-            //move R0->R1,R1->R2,R2->R3
-            R3 = R2;
+            //move R0->R1,R1->R2
             R2 = R1;
             R1 = R0;
             R0.number = block.number;
             R0.initR = R;
             R0.deltaR = 0;
             if (R1.number != (block.number - 1)) {
-                R3 = R2;
                 R2 = R1;
                 R1 = R0;
                 R1.number = block.number - 1;
             }
             if (R2.number != (block.number - 2)) {
-                R3 = R2;
                 R2 = R1;
                 R2.number = block.number - 2;
             }
-            if (R3.number != (block.number - 3)) {
-                R3 = R2;
-                R3.number = block.number - 3;
-            }
-        } else {
-            R0.deltaR = R - R0.initR;
         }
-        return 0;
+        int256 deltaR1 = R - R0.initR;
+        int256 deltaR2 = R - R2.initR;
+        if ((deltaR1 > deltaR0Limit) || (deltaR2 > deltaR2Limit)) {
+            R0.deltaR = 1;
+            return 1; // buy price +
+        } else if ((deltaR1 < -deltaR0Limit) || (deltaR2 < -deltaR2Limit)) {
+            R0.deltaR = -1;
+            return -1; // sell price -
+        }
+        return R1.deltaR;
     }
 
     //return the net position ratio of the liquidity pool and net of pool
@@ -732,17 +754,22 @@ contract HedgexSingle is HedgexERC20, Ownable {
     //inP is the index price
     function poolLimitTrade(int8 d, uint256 inP)
         internal
-        view
-        returns (int256, int256)
+        returns (
+            int256,
+            int256,
+            uint256
+        )
     {
         int256 net = getPoolNet(inP);
-        return (
-            (d *
-                (int256(poolShortAmount) - int256(poolLongAmount)) *
-                int256(inP) *
-                int24(divConst)) / net,
-            net
-        );
+        int256 R = (d *
+            (int256(poolShortAmount) - int256(poolLongAmount)) *
+            int256(inP) *
+            int24(divConst)) / net;
+        uint256 slidePrice = 0;
+        if (getDeltaPriceByR(R) == d) {
+            slidePrice = (inP * (divConst + deltaRSlidePriceRate)) / divConst;
+        }
+        return (R, net, slidePrice);
     }
 
     //caculate the slide price of trade
@@ -762,8 +789,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
         } else if (R >= poolNetAmountRateLimitPrice) {
             slideRate = uint256(R - poolNetAmountRateLimitPrice) / 5;
         }
-        slideRate = (inP * (slideRate + slideP)) / divConst;
-        return slideRate;
+        return (inP * (slideRate + slideP)) / divConst;
     }
 
     //caculate the open margin, and transfer token0 from user's wallet
@@ -875,8 +901,8 @@ contract HedgexSingle is HedgexERC20, Ownable {
             (price * token0Decimal) /
                 10**uint8(-amountDecimal) /
                 feedPriceDecimal,
-            (priceSlide * int256(token0Decimal * 10**uint8(-amountDecimal))) /
-                int256(feedPriceDecimal)
+            ((priceSlide * int256(token0Decimal)) /
+                int256(10**uint8(-amountDecimal))) / int256(feedPriceDecimal)
         );
     }
 
@@ -894,6 +920,21 @@ contract HedgexSingle is HedgexERC20, Ownable {
     function setPoolNetAmountRateLimitPrice(int24 value) external {
         require(msg.sender == owner, "forbidden");
         poolNetAmountRateLimitPrice = value;
+    }
+
+    function setDeltaR0Limit(int24 value) external {
+        require(msg.sender == owner, "forbidden");
+        deltaR0Limit = value;
+    }
+
+    function setDeltaR2Limit(int24 value) external {
+        require(msg.sender == owner, "forbidden");
+        deltaR2Limit = value;
+    }
+
+    function setDeltaRSlidePriceRate(uint24 value) external {
+        require(msg.sender == owner, "forbidden");
+        deltaRSlidePriceRate = value;
     }
 
     function setKeepMarginScale(uint8 value) external {

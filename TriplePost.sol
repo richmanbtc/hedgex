@@ -7,7 +7,7 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
     //the decimal of the index price, for example 100000000 for all the usdx
     uint16 public constant divConst = 10000;
     uint16 public constant slideScale = 11000;
-    uint8 public constant halfNumber = 1;
+    uint8 public halfNumber = 20;
     uint8 public constant maxSlideRate = 200;
     uint8 public immutable feeDRate;
     uint256 public immutable override decimals;
@@ -18,6 +18,8 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
     uint256 priceSlideRate;
     uint256 slideHeight;
     int8 slideDirection;
+
+    mapping(address => int8) public posters;
 
     modifier ensure(uint256 deadline) {
         require(deadline >= block.timestamp, "0");
@@ -36,13 +38,14 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
         feeDRate = _feeDRate;
         price = value;
         slideDirection = 1;
+        posters[msg.sender] = 6;
     }
 
     function postPrice(uint256 value, uint256 deadline)
         external
         ensure(deadline)
     {
-        require(msg.sender == owner, "1");
+        require(posters[msg.sender] == 6, "1");
         require(value > 0, "2");
 
         //1. caculate the priceSlideRate in current block number
@@ -112,5 +115,15 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
         int256 slidePrice = slideDirection *
             (int256((price * slideRate) / divConst));
         return (price, decimals, slidePrice);
+    }
+
+    function setPosters(address poster, int8 value) external {
+        require(msg.sender == owner, "1");
+        posters[poster] = value;
+    }
+
+    function setHalfNumber(uint8 value) external {
+        require(msg.sender == owner, "1");
+        halfNumber = value;
     }
 }
