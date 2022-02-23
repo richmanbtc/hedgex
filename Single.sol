@@ -86,9 +86,6 @@ contract HedgexSingle is HedgexERC20, Ownable {
     int24 public deltaR2Limit = 100000;
     uint24 public deltaRSlidePriceRate = 10000;
 
-    //price shift value, it is a fixed ratio, + when buy and - when sell, 0.005%
-    uint8 public constant slideP = 50;
-
     //keep margin scale to explosive
     uint8 public keepMarginScale = 30;
 
@@ -789,7 +786,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
         } else if (R >= poolNetAmountRateLimitPrice) {
             slideRate = uint256(R - poolNetAmountRateLimitPrice) / 5;
         }
-        return (inP * (slideRate + slideP)) / divConst;
+        return (inP * slideRate) / divConst;
     }
 
     //caculate the open margin, and transfer token0 from user's wallet

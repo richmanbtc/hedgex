@@ -5,10 +5,11 @@ import "./Ownable.sol";
 
 contract TripleIndexPrice is IIndexPrice, Ownable {
     //the decimal of the index price, for example 100000000 for all the usdx
-    uint16 public constant divConst = 10000;
-    uint16 public constant slideScale = 11000;
+    uint24 public constant divConst = 100000;
+    uint24 public constant slideScale = 110000;
+    uint8 public constant slideP = 5;
     uint8 public halfNumber = 20;
-    uint8 public constant maxSlideRate = 200;
+    uint16 public constant maxSlideRate = 2000;
     uint8 public immutable feeDRate;
     uint256 public immutable override decimals;
     uint256 public updateAt;
@@ -54,7 +55,7 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
         //2. caculate the slideRate in this tx
         uint256 deltaP = 0;
         if (value > price) deltaP = value - price;
-        else deltaP = price - deltaP;
+        else deltaP = price - value;
         uint256 deltaPR = (deltaP * divConst) / price;
 
         if (deltaPR > feeDRate) {
@@ -88,15 +89,15 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
     function getCurrentPriceSlideRate() public view returns (uint256, uint256) {
         uint256 slideRate = priceSlideRate;
         uint256 height = slideHeight;
-        while (slideRate > feeDRate) {
+        while (slideRate > slideP) {
             if ((height + halfNumber) > block.number) {
                 break;
             }
             height += halfNumber;
             slideRate /= 2;
         }
-        if (slideRate <= feeDRate) {
-            slideRate = 0;
+        if (slideRate <= slideP) {
+            slideRate = slideP;
         }
         return (slideRate, height);
     }
