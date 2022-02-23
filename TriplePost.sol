@@ -8,10 +8,10 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
     uint24 public constant divConst = 100000;
     uint24 public constant slideScale = 110000;
     uint8 public constant slideP = 5;
-    uint8 public halfNumber = 20;
+    uint8 public constant halfNumber = 25;
     uint16 public constant maxSlideRate = 2000;
-    uint8 public immutable feeDRate;
-    uint256 public immutable override decimals;
+    uint8 public constant feeDRate = 120;
+    uint256 public constant override decimals = 10000;
     bytes32 public symbol;
 
     uint256 price;
@@ -26,20 +26,11 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
         _;
     }
 
-    constructor(
-        string memory _symbol,
-        uint256 _priceDecimal,
-        uint8 _feeDRate,
-        uint256 value,
-        uint8 _halfNumber
-    ) {
+    constructor(string memory _symbol, uint256 value) {
         symbol = keccak256(abi.encodePacked(_symbol));
-        decimals = _priceDecimal;
         owner = msg.sender;
-        feeDRate = _feeDRate;
         price = value;
         slideDirection = 1;
-        halfNumber = _halfNumber;
         posters[msg.sender] = 6;
     }
 
@@ -121,10 +112,5 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
     function setPosters(address poster, int8 value) external {
         require(msg.sender == owner, "1");
         posters[poster] = value;
-    }
-
-    function setHalfNumber(uint8 value) external {
-        require(msg.sender == owner, "1");
-        halfNumber = value;
     }
 }

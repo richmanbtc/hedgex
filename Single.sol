@@ -190,7 +190,9 @@ contract HedgexSingle is HedgexERC20, Ownable {
         uint256 _minStartPool,
         uint8 _leverage,
         int8 _amountDecimal,
-        uint8 _keepMarginScale
+        uint8 _keepMarginScale,
+        int24 _ROpen,
+        int24 _RPrice
     ) HedgexERC20(IERC20(_token0).decimals()) {
         poolState = 1;
         feedPrice = IIndexPrice(_feedPrice);
@@ -202,6 +204,8 @@ contract HedgexSingle is HedgexERC20, Ownable {
         feeOn = true;
         amountDecimal = _amountDecimal;
         keepMarginScale = _keepMarginScale;
+        poolNetAmountRateLimitOpen = _ROpen;
+        poolNetAmountRateLimitPrice = _RPrice;
 
         owner = msg.sender;
     }
