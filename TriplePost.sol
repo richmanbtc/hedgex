@@ -12,7 +12,6 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
     uint16 public constant maxSlideRate = 2000;
     uint8 public immutable feeDRate;
     uint256 public immutable override decimals;
-    uint256 public updateAt;
     bytes32 public symbol;
 
     uint256 price;
@@ -31,7 +30,8 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
         string memory _symbol,
         uint256 _priceDecimal,
         uint8 _feeDRate,
-        uint256 value
+        uint256 value,
+        uint8 _halfNumber
     ) {
         symbol = keccak256(abi.encodePacked(_symbol));
         decimals = _priceDecimal;
@@ -39,6 +39,7 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
         feeDRate = _feeDRate;
         price = value;
         slideDirection = 1;
+        halfNumber = _halfNumber;
         posters[msg.sender] = 6;
     }
 
@@ -83,7 +84,6 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
         } else {
             price = value;
         }
-        updateAt = block.timestamp;
     }
 
     function getCurrentPriceSlideRate() public view returns (uint256, uint256) {
