@@ -52,15 +52,15 @@
         "absolutePath": "d:/contract/hedgex/interfaces/IIndexPrice.sol",
         "exportedSymbols": {
             "IIndexPrice": [
-                4571
+                4568
             ]
         },
-        "id": 4572,
+        "id": 4569,
         "license": "UNLICENSED",
         "nodeType": "SourceUnit",
         "nodes": [
             {
-                "id": 4556,
+                "id": 4553,
                 "literals": [
                     "solidity",
                     ">=",
@@ -77,9 +77,9 @@
                 "contractDependencies": [],
                 "contractKind": "interface",
                 "fullyImplemented": false,
-                "id": 4571,
+                "id": 4568,
                 "linearizedBaseContracts": [
-                    4571
+                    4568
                 ],
                 "name": "IIndexPrice",
                 "nameLocation": "77:11:8",
@@ -87,7 +87,7 @@
                 "nodes": [
                     {
                         "functionSelector": "10bace8c",
-                        "id": 4565,
+                        "id": 4562,
                         "implemented": false,
                         "kind": "function",
                         "modifiers": [],
@@ -95,23 +95,23 @@
                         "nameLocation": "105:10:8",
                         "nodeType": "FunctionDefinition",
                         "parameters": {
-                            "id": 4557,
+                            "id": 4554,
                             "nodeType": "ParameterList",
                             "parameters": [],
                             "src": "115:2:8"
                         },
                         "returnParameters": {
-                            "id": 4564,
+                            "id": 4561,
                             "nodeType": "ParameterList",
                             "parameters": [
                                 {
                                     "constant": false,
-                                    "id": 4559,
+                                    "id": 4556,
                                     "mutability": "mutable",
                                     "name": "price",
                                     "nameLocation": "190:5:8",
                                     "nodeType": "VariableDeclaration",
-                                    "scope": 4565,
+                                    "scope": 4562,
                                     "src": "182:13:8",
                                     "stateVariable": false,
                                     "storageLocation": "default",
@@ -120,7 +120,7 @@
                                         "typeString": "uint256"
                                     },
                                     "typeName": {
-                                        "id": 4558,
+                                        "id": 4555,
                                         "name": "uint256",
                                         "nodeType": "ElementaryTypeName",
                                         "src": "182:7:8",
@@ -133,12 +133,12 @@
                                 },
                                 {
                                     "constant": false,
-                                    "id": 4561,
+                                    "id": 4558,
                                     "mutability": "mutable",
                                     "name": "decimal",
                                     "nameLocation": "218:7:8",
                                     "nodeType": "VariableDeclaration",
-                                    "scope": 4565,
+                                    "scope": 4562,
                                     "src": "210:15:8",
                                     "stateVariable": false,
                                     "storageLocation": "default",
@@ -147,7 +147,7 @@
                                         "typeString": "uint256"
                                     },
                                     "typeName": {
-                                        "id": 4560,
+                                        "id": 4557,
                                         "name": "uint256",
                                         "nodeType": "ElementaryTypeName",
                                         "src": "210:7:8",
@@ -160,12 +160,12 @@
                                 },
                                 {
                                     "constant": false,
-                                    "id": 4563,
+                                    "id": 4560,
                                     "mutability": "mutable",
                                     "name": "slidePrice",
                                     "nameLocation": "247:10:8",
                                     "nodeType": "VariableDeclaration",
-                                    "scope": 4565,
+                                    "scope": 4562,
                                     "src": "240:17:8",
                                     "stateVariable": false,
                                     "storageLocation": "default",
@@ -174,7 +174,7 @@
                                         "typeString": "int256"
                                     },
                                     "typeName": {
-                                        "id": 4562,
+                                        "id": 4559,
                                         "name": "int256",
                                         "nodeType": "ElementaryTypeName",
                                         "src": "240:6:8",
@@ -188,7 +188,7 @@
                             ],
                             "src": "167:101:8"
                         },
-                        "scope": 4571,
+                        "scope": 4568,
                         "src": "96:173:8",
                         "stateMutability": "view",
                         "virtual": false,
@@ -196,7 +196,7 @@
                     },
                     {
                         "functionSelector": "313ce567",
-                        "id": 4570,
+                        "id": 4567,
                         "implemented": false,
                         "kind": "function",
                         "modifiers": [],
@@ -204,23 +204,23 @@
                         "nameLocation": "286:8:8",
                         "nodeType": "FunctionDefinition",
                         "parameters": {
-                            "id": 4566,
+                            "id": 4563,
                             "nodeType": "ParameterList",
                             "parameters": [],
                             "src": "294:2:8"
                         },
                         "returnParameters": {
-                            "id": 4569,
+                            "id": 4566,
                             "nodeType": "ParameterList",
                             "parameters": [
                                 {
                                     "constant": false,
-                                    "id": 4568,
+                                    "id": 4565,
                                     "mutability": "mutable",
                                     "name": "",
                                     "nameLocation": "-1:-1:-1",
                                     "nodeType": "VariableDeclaration",
-                                    "scope": 4570,
+                                    "scope": 4567,
                                     "src": "315:7:8",
                                     "stateVariable": false,
                                     "storageLocation": "default",
@@ -229,7 +229,7 @@
                                         "typeString": "uint256"
                                     },
                                     "typeName": {
-                                        "id": 4567,
+                                        "id": 4564,
                                         "name": "uint256",
                                         "nodeType": "ElementaryTypeName",
                                         "src": "315:7:8",
@@ -243,14 +243,14 @@
                             ],
                             "src": "314:9:8"
                         },
-                        "scope": 4571,
+                        "scope": 4568,
                         "src": "277:47:8",
                         "stateMutability": "nonpayable",
                         "virtual": false,
                         "visibility": "external"
                     }
                 ],
-                "scope": 4572,
+                "scope": 4569,
                 "src": "67:260:8",
                 "usedErrors": []
             }
