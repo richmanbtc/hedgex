@@ -764,7 +764,7 @@ contract HedgexSingle is HedgexERC20, Ownable {
             int24(divConst)) / net;
         uint256 slidePrice = 0;
         if (getDeltaPriceByR(R) == d) {
-            slidePrice = (inP * (divConst + deltaRSlidePriceRate)) / divConst;
+            slidePrice = (inP * deltaRSlidePriceRate) / divConst;
         }
         return (R, net, slidePrice);
     }
