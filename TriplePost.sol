@@ -15,9 +15,10 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
     bytes32 public symbol;
 
     uint256 price;
-    uint256 priceSlideRate;
-    uint256 slideHeight;
-    int8 slideDirection;
+    uint256 priceSlideRateUp;
+    uint256 slideUpHeight;
+    uint256 priceSlideRateDown;
+    uint256 slideDownHeight;
 
     mapping(address => int8) public posters;
 
@@ -30,7 +31,6 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
         symbol = keccak256(abi.encodePacked(_symbol));
         owner = msg.sender;
         price = value;
-        slideDirection = 1;
         posters[msg.sender] = 6;
     }
 
@@ -42,7 +42,12 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
         require(value > 0, "2");
 
         //1. caculate the priceSlideRate in current block number
-        (priceSlideRate, slideHeight) = getCurrentPriceSlideRate();
+        (
+            priceSlideRateUp,
+            priceSlideRateDown,
+            slideUpHeight,
+            slideDownHeight
+        ) = getCurrentPriceSlideRate();
 
         //2. caculate the slideRate in this tx
         uint256 deltaP = 0;
@@ -55,42 +60,62 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
             if (slideRate > maxSlideRate) {
                 slideRate = maxSlideRate;
             }
-            if (slideRate > priceSlideRate) {
-                priceSlideRate = slideRate;
-                slideHeight = block.number;
-                if (value > price) {
-                    slideDirection = 1;
-                } else {
-                    slideDirection = -1;
+            if (value > price) {
+                if (slideRate > priceSlideRateUp) {
+                    priceSlideRateUp = slideRate;
+                    slideUpHeight = block.number;
+                }
+            } else {
+                if (slideRate > priceSlideRateDown) {
+                    priceSlideRateDown = slideRate;
+                    slideDownHeight = block.number;
                 }
             }
         }
-        if (priceSlideRate == maxSlideRate) {
-            deltaP = (maxSlideRate * price) / divConst;
-            if (value > price) {
-                price += deltaP;
-            } else {
-                price -= deltaP;
-            }
+        if ((value > price) && (priceSlideRateUp == maxSlideRate)) {
+            price += (maxSlideRate * price) / divConst;
+        } else if ((value < price) && (priceSlideRateDown == maxSlideRate)) {
+            price -= (maxSlideRate * price) / divConst;
         } else {
             price = value;
         }
     }
 
-    function getCurrentPriceSlideRate() public view returns (uint256, uint256) {
-        uint256 slideRate = priceSlideRate;
-        uint256 height = slideHeight;
-        while (slideRate > slideP) {
-            if ((height + halfNumber) > block.number) {
+    function getCurrentPriceSlideRate()
+        public
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256,
+            uint256
+        )
+    {
+        uint256 slideRateUp = priceSlideRateUp;
+        uint256 slideRateDown = priceSlideRateDown;
+        uint256 heightUp = slideUpHeight;
+        while (slideRateUp > slideP) {
+            if ((heightUp + halfNumber) > block.number) {
                 break;
             }
-            height += halfNumber;
-            slideRate /= 2;
+            heightUp += halfNumber;
+            slideRateUp /= 2;
         }
-        if (slideRate <= slideP) {
-            slideRate = slideP;
+        uint256 heightDown = slideDownHeight;
+        while (slideRateDown > slideP) {
+            if ((heightDown + halfNumber) > block.number) {
+                break;
+            }
+            heightDown += halfNumber;
+            slideRateDown /= 2;
         }
-        return (slideRate, height);
+        if (slideRateUp < slideP) {
+            slideRateUp = slideP;
+        }
+        if (slideRateDown < slideP) {
+            slideRateDown = slideP;
+        }
+        return (slideRateUp, slideRateDown, heightUp, heightDown);
     }
 
     function indexPrice()
@@ -100,13 +125,19 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
         returns (
             uint256,
             uint256,
-            int256
+            uint256,
+            uint256
         )
     {
-        (uint256 slideRate, ) = getCurrentPriceSlideRate();
-        int256 slidePrice = slideDirection *
-            (int256((price * slideRate) / divConst));
-        return (price, decimals, slidePrice);
+        (
+            uint256 slideRateUp,
+            uint256 slideRateDown,
+            ,
+
+        ) = getCurrentPriceSlideRate();
+        uint256 slideUpPrice = (price * slideRateUp) / divConst;
+        uint256 slideDownPrice = (price * slideRateDown) / divConst;
+        return (price, decimals, slideUpPrice, slideDownPrice);
     }
 
     function setPosters(address poster, int8 value) external {
