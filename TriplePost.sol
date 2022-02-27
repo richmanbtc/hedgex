@@ -137,7 +137,7 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
         ) = getCurrentPriceSlideRate();
         uint256 slideUpPrice = (price * slideRateUp) / divConst;
         uint256 slideDownPrice = (price * slideRateDown) / divConst;
-        return (price, decimals, slideUpPrice, slideDownPrice);
+        return (price, slideUpPrice, slideDownPrice, decimals);
     }
 
     function setPosters(address poster, int8 value) external {
