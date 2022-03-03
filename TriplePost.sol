@@ -71,14 +71,16 @@ contract TripleIndexPrice is IIndexPrice, Ownable {
                     slideDownHeight = block.number;
                 }
             }
+            if (deltaPR >= maxSlideRate) {
+                if (value > price) {
+                    price += (maxSlideRate * price) / divConst;
+                } else {
+                    price -= (maxSlideRate * price) / divConst;
+                }
+                return;
+            }
         }
-        if ((value > price) && (priceSlideRateUp == maxSlideRate)) {
-            price += (maxSlideRate * price) / divConst;
-        } else if ((value < price) && (priceSlideRateDown == maxSlideRate)) {
-            price -= (maxSlideRate * price) / divConst;
-        } else {
-            price = value;
-        }
+        price = value;
     }
 
     function getCurrentPriceSlideRate()
